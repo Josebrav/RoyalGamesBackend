@@ -343,7 +343,7 @@ export class UsersController {
   }
 
   @Get('user/:userId/avatar-image')
-  @ApiOperation({ summary: 'Get user avatar image bytes' })
+  @ApiOperation({ summary: 'Get user avatar image bytes (square, head-focused thumbnail; falls back to the full capture for accounts saved before the thumbnail existed)' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiResponse({ status: 200, description: 'Avatar image retrieved' })
   @ApiResponse({ status: 404, description: 'User not found' })
@@ -351,7 +351,12 @@ export class UsersController {
     @Param('userId', new ParseUUIDPipe()) userId: string,
     @Res() res: Response,
   ) {
-    const result = await this.usersService.getAvatarBinary(userId);
+    // Todo el frontend (perfil, nav, mensajes, amigos, admin) pega acá para mostrar la foto
+    // de perfil, así que tiene que ser la miniatura ya compuesta (avatarThumbBin) — la que
+    // arma Unity centrada en cabeza/pecho — y no el capture completo sin componer
+    // (avatarBin), que es lo que devolvía antes. Por eso ajustar el recorte del thumbnail en
+    // Unity nunca se veía reflejado acá: este endpoint ni lo estaba sirviendo.
+    const result = await this.usersService.getAvatarThumbnailBinary(userId);
     if (!result || !result.buffer) {
       throw new ForbiddenException('User or avatar not found');
     }
