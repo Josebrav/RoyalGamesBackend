@@ -343,7 +343,7 @@ export class UsersController {
   }
 
   @Get('user/:userId/avatar-image')
-  @ApiOperation({ summary: 'Get user avatar image bytes (square, head-focused thumbnail; falls back to the full capture for accounts saved before the thumbnail existed)' })
+  @ApiOperation({ summary: 'Get user avatar image bytes (full capture, not cropped — same avatar as seen in Unity)' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiResponse({ status: 200, description: 'Avatar image retrieved' })
   @ApiResponse({ status: 404, description: 'User not found' })
@@ -351,12 +351,12 @@ export class UsersController {
     @Param('userId', new ParseUUIDPipe()) userId: string,
     @Res() res: Response,
   ) {
-    // Todo el frontend (perfil, nav, mensajes, amigos, admin) pega acá para mostrar la foto
-    // de perfil, así que tiene que ser la miniatura ya compuesta (avatarThumbBin) — la que
-    // arma Unity centrada en cabeza/pecho — y no el capture completo sin componer
-    // (avatarBin), que es lo que devolvía antes. Por eso ajustar el recorte del thumbnail en
-    // Unity nunca se veía reflejado acá: este endpoint ni lo estaba sirviendo.
-    const result = await this.usersService.getAvatarThumbnailBinary(userId);
+    // El perfil (y el resto del frontend) tiene que mostrar el avatar completo, sin ningún
+    // recorte agregado — tal como se ve en Unity. avatarBin es exactamente eso: la captura
+    // completa, solo recortada por transparencia (sin relleno vacío alrededor), nunca
+    // recompuesta en un cuadrado. avatarThumbBin (servido aparte en /avatar-thumbnail) es un
+    // recorte cuadrado pensado para íconos chicos tipo nav, no para esto.
+    const result = await this.usersService.getAvatarBinary(userId);
     if (!result || !result.buffer) {
       throw new ForbiddenException('User or avatar not found');
     }
