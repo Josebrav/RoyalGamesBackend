@@ -14,7 +14,9 @@ import { MailingModule } from '../mailing/mailing.module';
     TypeOrmModule.forFeature([User, PasswordResetToken]),
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'royal-secret-key',
+      // Sin fallback a propósito: si JWT_SECRET no está o es débil, el boot debe
+      // fallar (main.ts lo valida antes de levantar el server).
+      secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '24h' },
     }),
     MailingModule,

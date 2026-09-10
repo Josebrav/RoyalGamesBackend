@@ -22,6 +22,21 @@ async function bootstrap() {
       console.error('Missing required environment variables:', missing.join(', '));
       throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
+
+    // No dejar arrancar con un secreto débil o con los placeholders de ejemplo:
+    // el JWT es lo único entre un atacante y un token de admin forjado.
+    const jwtSecret = process.env.JWT_SECRET as string;
+    const weakSecrets = [
+      'royal-secret-key',
+      'your-secret-key-here-change-in-production',
+      'secret',
+      'changeme',
+    ];
+    if (jwtSecret.length < 32 || weakSecrets.includes(jwtSecret)) {
+      throw new Error(
+        'JWT_SECRET is too weak: use a random value of at least 32 characters (e.g. `openssl rand -hex 32`).',
+      );
+    }
   };
 
   validateEnv();
