@@ -13,6 +13,13 @@ import { Role } from '../../common/enums/role.enum';
 import { RankTier } from '../../common/enums/rank-tier.enum';
 import { ChipsAward } from '../chips/entities/chips-award.entity';
 import { DEFAULT_AVATAR_BUFFER, DEFAULT_AVATAR_MIME, DEFAULT_AVATAR_DATA, DEFAULT_AVATAR_THUMB_BUFFER } from '../../common/constants/default-avatar';
+import {
+  DEFAULT_FEMALE_AVATAR_READY,
+  DEFAULT_FEMALE_AVATAR_BUFFER,
+  DEFAULT_FEMALE_AVATAR_MIME,
+  DEFAULT_FEMALE_AVATAR_DATA,
+  DEFAULT_FEMALE_AVATAR_THUMB_BUFFER,
+} from '../../common/constants/default-female-avatar';
 import { MailingService } from '../mailing/mailing.service';
 import * as crypto from 'crypto';
 
@@ -81,10 +88,36 @@ export class UsersService {
       }
     }
 
-    // El avatar por defecto del Bazar (piel/pelo) solo tiene sentido para el modelo
-    // masculino que ya está cargado ahí; a las mujeres se les deja sin avatar por defecto
-    // hasta que exista un snapshot propio para ese caso.
+    // Avatar por defecto del Bazar horneado al crear la cuenta: uno para hombre (sexo 'H') y
+    // otro para mujer (sexo 'M'). El de mujer solo se aplica si ya existe el snapshot
+    // (DEFAULT_FEMALE_AVATAR_READY); mientras no exista, las mujeres se crean sin avatar por
+    // defecto, igual que antes.
     const isMale = userData.sexo === 'H';
+    const isFemale = userData.sexo === 'M';
+
+    const femaleDefaultReady =
+      isFemale &&
+      DEFAULT_FEMALE_AVATAR_READY &&
+      DEFAULT_FEMALE_AVATAR_BUFFER != null &&
+      DEFAULT_FEMALE_AVATAR_THUMB_BUFFER != null;
+
+    const defaultAvatarFields = isMale
+      ? {
+          avatarBin: DEFAULT_AVATAR_BUFFER,
+          avatarMime: DEFAULT_AVATAR_MIME,
+          avatarData: DEFAULT_AVATAR_DATA,
+          avatarThumbBin: DEFAULT_AVATAR_THUMB_BUFFER,
+          avatarThumbMime: DEFAULT_AVATAR_MIME,
+        }
+      : femaleDefaultReady
+        ? {
+            avatarBin: DEFAULT_FEMALE_AVATAR_BUFFER as Buffer,
+            avatarMime: DEFAULT_FEMALE_AVATAR_MIME,
+            avatarData: DEFAULT_FEMALE_AVATAR_DATA,
+            avatarThumbBin: DEFAULT_FEMALE_AVATAR_THUMB_BUFFER as Buffer,
+            avatarThumbMime: DEFAULT_FEMALE_AVATAR_MIME,
+          }
+        : {};
 
     // Create user without initial chips
     const user = await this.usersRepository.create({
@@ -94,13 +127,7 @@ export class UsersService {
       password: hashedPassword,
       chips: 0,
       firstChips: false,
-      ...(isMale && {
-        avatarBin: DEFAULT_AVATAR_BUFFER,
-        avatarMime: DEFAULT_AVATAR_MIME,
-        avatarData: DEFAULT_AVATAR_DATA,
-        avatarThumbBin: DEFAULT_AVATAR_THUMB_BUFFER,
-        avatarThumbMime: DEFAULT_AVATAR_MIME,
-      }),
+      ...defaultAvatarFields,
       referralCode,
       referredBy,
     });
