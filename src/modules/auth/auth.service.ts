@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OAuth2Client } from 'google-auth-library';
+import axios from 'axios';
 import * as crypto from 'crypto';
 import { User } from '../users/entities/user.entity';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
@@ -100,13 +101,31 @@ export class AuthService {
     });
 
     if (user) {
-      // Actualizar googleId si aún no lo tiene (usuario ya registrado que ahora usa Google)
-      if (!user.googleId) {
-        user.googleId = googleId;
-        if (!user.image && picture) {
-          user.image = picture;
+      // Usuario ya registrado que ahora entra con Google: completar lo que falte.
+      const patch: Partial<User> = {};
+      if (!user.googleId) patch.googleId = googleId;
+      if (!user.image && picture) patch.image = picture;
+
+      // Backfill del avatar: si no tiene binario propio y Google dio foto, la bajamos
+      // una vez. Sin esto, /user/:id/avatar-image le responde 403 para siempre.
+      // Chequeo barato de existencia (avatarBin es select:false, no viene en el findOne).
+      if (picture) {
+        const [row] = await this.usersRepository.query(
+          'SELECT avatar_bin IS NOT NULL AS "hasAvatar" FROM users WHERE id = $1',
+          [user.id],
+        );
+        if (row && row.hasAvatar === false) {
+          const googleAvatar = await this.fetchGoogleAvatar(picture);
+          if (googleAvatar) {
+            patch.avatarBin = googleAvatar.buffer;
+            patch.avatarMime = googleAvatar.mime;
+          }
         }
-        await this.usersRepository.save(user);
+      }
+
+      if (Object.keys(patch).length > 0) {
+        await this.usersRepository.update(user.id, patch);
+        Object.assign(user, patch);
       }
     } else {
       // 3. Crear usuario nuevo (registro via Google)
@@ -132,6 +151,18 @@ export class AuthService {
         referralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
       } while (await this.usersRepository.findOne({ where: { referralCode } }));
 
+      // Avatar: si Google mandó foto, la bajamos una vez y la guardamos como avatar
+      // propio (así /user/:id/avatar-image no responde 403). Si falla la descarga o no
+      // hay foto, cae al avatar por defecto horneado.
+      const googleAvatar = picture ? await this.fetchGoogleAvatar(picture) : null;
+      const avatarFields = googleAvatar
+        ? { avatarBin: googleAvatar.buffer, avatarMime: googleAvatar.mime }
+        : {
+            avatarBin: DEFAULT_AVATAR_BUFFER,
+            avatarMime: DEFAULT_AVATAR_MIME,
+            avatarData: DEFAULT_AVATAR_DATA,
+          };
+
       user = this.usersRepository.create({
         email: emailLower,
         nick,
@@ -141,13 +172,7 @@ export class AuthService {
         chips: 0,
         firstChips: false,
         referralCode,
-        // Only fall back to the baked-in default avatar when Google didn't hand us a
-        // real profile picture — never overrides the user's own photo.
-        ...(picture ? {} : {
-          avatarBin: DEFAULT_AVATAR_BUFFER,
-          avatarMime: DEFAULT_AVATAR_MIME,
-          avatarData: DEFAULT_AVATAR_DATA,
-        }),
+        ...avatarFields,
       });
 
       user = await this.usersRepository.save(user);
@@ -198,6 +223,39 @@ export class AuthService {
         image: user.image,
       },
     };
+  }
+
+  /**
+   * Baja la foto de perfil de Google una sola vez para guardarla como avatar propio
+   * (avatarBin). Si no se puede (timeout, no es una imagen, respuesta muy grande, etc.)
+   * devuelve null y el caller cae al avatar por defecto. Nunca lanza: un fallo acá no
+   * debe romper el login con Google.
+   */
+  private async fetchGoogleAvatar(
+    pictureUrl: string,
+  ): Promise<{ buffer: Buffer; mime: string } | null> {
+    try {
+      // Google manda =s96-c (96px) por defecto; pedimos una resolución más útil.
+      const url = pictureUrl.replace(/=s\d+(-c)?$/, '=s512$1');
+      const res = await axios.get<ArrayBuffer>(url, {
+        responseType: 'arraybuffer',
+        timeout: 3000,
+        maxContentLength: 5 * 1024 * 1024,
+      });
+      const mime = String(res.headers['content-type'] || '')
+        .split(';')[0]
+        .trim();
+      if (!mime.startsWith('image/')) {
+        this.logger.warn(`Avatar de Google no es una imagen (content-type: ${mime})`);
+        return null;
+      }
+      return { buffer: Buffer.from(res.data), mime };
+    } catch (err: any) {
+      this.logger.warn(
+        `No se pudo descargar el avatar de Google: ${err?.message || err}`,
+      );
+      return null;
+    }
   }
 
   async validateUser(id: string): Promise<User | null> {
