@@ -28,6 +28,7 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users.service';
 import { UpdateAvatarDto } from './dtos/update-avatar.dto';
 import { CreateUserDto } from './dtos/create-user.dto';
@@ -44,10 +45,32 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
+const BAZAR_SESSION_TOKEN_TTL_SECONDS = 300;
+
 @ApiTags('Users')
 @Controller()
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private jwtService: JwtService,
+  ) {}
+
+  // Igual patrón que games/mines/session-token: la SPA (con sesión real, JwtAuthGuard) pide
+  // este token corto antes de abrir el iframe del editor de Bazar. Preparado pero TODAVÍA NO
+  // exigido en PUT user/:userId/avatar — esa app vive aparte en S3 y hay que actualizarla
+  // primero para que pida y mande este token antes de activar el guard ahí (si no, se rompe
+  // el guardado de avatar en producción). Ver memoria/plan de la Tarea 10.
+  @Post('bazar/session-token')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Mint a short-lived token the Bazar avatar editor uses to identify the player' })
+  async issueBazarSessionToken(@CurrentUser() user: any) {
+    const token = await this.jwtService.signAsync(
+      { sub: user.id, scope: 'bazar' },
+      { expiresIn: `${BAZAR_SESSION_TOKEN_TTL_SECONDS}s` },
+    );
+    return { token, expiresIn: BAZAR_SESSION_TOKEN_TTL_SECONDS };
+  }
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
@@ -95,9 +118,13 @@ export class UsersController {
   }
 
   @Get('user/:id')
-  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiOperation({
+    summary:
+      'Get a user public profile by ID (no auth). Safe projection only — never ' +
+      'email, googleId, referralCode or other PII.',
+  })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'User retrieved successfully' })
+  @ApiResponse({ status: 200, description: 'Public profile retrieved successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async getUserById(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.usersService.getUserById(id);
@@ -116,9 +143,14 @@ export class UsersController {
   }
 
   @Get('user-nick')
-  @ApiOperation({ summary: 'Get user by nick' })
+  @ApiOperation({
+    summary:
+      'Get a user public profile by nick (no auth). Safe projection only — never ' +
+      'email, googleId, referralCode or other PII. nick→email resolution for login ' +
+      'now happens server-side in POST /auth/login.',
+  })
   @ApiQuery({ name: 'nick', description: 'User nickname' })
-  @ApiResponse({ status: 200, description: 'User retrieved successfully' })
+  @ApiResponse({ status: 200, description: 'Public profile retrieved successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async getUserByNick(@Query('nick') nick: string) {
     return this.usersService.getUserByNick(nick);

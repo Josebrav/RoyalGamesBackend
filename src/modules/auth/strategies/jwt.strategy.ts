@@ -8,7 +8,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'royal-secret-key',
+      // Sin fallback: main.ts valida que JWT_SECRET exista y sea fuerte en el boot.
+      secretOrKey: process.env.JWT_SECRET as string,
     });
   }
 

@@ -15,7 +15,8 @@ import { BingoModule } from '../bingo/bingo.module';
     // AuthModule only exports AuthService (not JwtModule), so this module registers its own
     // JwtService against the same JWT_SECRET to sign/verify Mines session tokens.
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'royal-secret-key',
+      // Sin fallback: main.ts valida que JWT_SECRET exista y sea fuerte en el boot.
+      secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '24h' },
     }),
     // For pushing a fresh room_state (chips) to Minas's chat channel whenever a round moves
