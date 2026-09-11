@@ -6,6 +6,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
 import morgan from 'morgan';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
@@ -62,6 +63,7 @@ async function bootstrap() {
 
   // Middleware
   app.use(morgan('dev'));
+  app.use(cookieParser());
   app.use(
     cors({
       origin: ALLOWED_ORIGINS,
