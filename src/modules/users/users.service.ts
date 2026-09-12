@@ -299,13 +299,41 @@ export class UsersService {
     await this.usersRepository.delete(id);
   }
 
+  /**
+   * Proyección pública de un usuario: SOLO lo que puede verse en un perfil público o
+   * en un listado sin sesión. Es una allowlist a propósito (no un destructuring-omit):
+   * si mañana se agrega un campo sensible a User, no se filtra por defecto.
+   * Nunca incluye: email, password, googleId, referralCode, referredBy, avatarData.
+   */
+  private toPublicProfile(user: User): Partial<User> {
+    return {
+      id: user.id,
+      nick: user.nick,
+      image: user.image,
+      rank: user.rank,
+      role: user.role,
+      sexo: user.sexo,
+      age: user.age,
+      country: user.country,
+      description: user.description,
+      chips: user.chips,
+      totalChipsDeposited: user.totalChipsDeposited,
+      banned: user.banned,
+      inactive: user.inactive,
+      firstChips: user.firstChips,
+      lastSeen: user.lastSeen,
+      currentActivity: user.currentActivity,
+      createdAt: user.createdAt,
+    };
+  }
+
+  // Público (sin guard): devuelve solo la proyección segura, nunca email/googleId/etc.
   async getUserById(id: string): Promise<Partial<User>> {
     const user = await this.usersRepository.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    return this.toPublicProfile(user);
   }
 
   async getUserByEmail(email: string): Promise<Partial<User>> {
@@ -318,13 +346,14 @@ export class UsersService {
     return userWithoutPassword;
   }
 
+  // Público (sin guard): devuelve solo la proyección segura. La resolución nick→email
+  // para el login se hace en AuthService.login, no acá.
   async getUserByNick(nick: string): Promise<Partial<User>> {
     const user = await this.usersRepository.findByNick(nick);
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    return this.toPublicProfile(user);
   }
 
   /**
