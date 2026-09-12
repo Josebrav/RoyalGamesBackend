@@ -9,14 +9,32 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { randomBytes, randomInt, createHash } from 'crypto';
 import { MinesRound } from './entities/mines-round.entity';
+import { MinesJackpot } from './entities/mines-jackpot.entity';
 import { User } from '../users/entities/user.entity';
 import { ChipsAward } from '../chips/entities/chips-award.entity';
 import { StartRoundDto } from './dtos/start-round.dto';
 import { RevealTileDto } from './dtos/reveal-tile.dto';
 import { CashoutDto } from './dtos/cashout.dto';
 import { MINES_TILE_COUNT } from './constants/fixed-bet-values';
+import {
+  MINES_JACKPOT_ID,
+  MINES_JACKPOT_CONTRIBUTION_RATE,
+  MINES_JACKPOT_ELIGIBILITY_WINDOW_MS,
+} from './constants/jackpot.constants';
 import { BingoService } from '../bingo/bingo.service';
 import { BingoGateway } from '../bingo/bingo.gateway';
+
+export interface RevealTileResult {
+  result: 'bomb' | 'diamond';
+  busted: boolean;
+  minePositions?: number[];
+  serverSeed?: string;
+  multiplier?: number;
+  accumulatedWinnings?: number;
+  jackpotWon: boolean;
+  jackpotAmount: number;
+  chips?: number;
+}
 
 // Postgres unique_violation, thrown by the partial unique index on (userId) WHERE
 // status = 'active' when two concurrent `start` calls race past the pre-check below.
@@ -82,6 +100,23 @@ export class MinesService {
         user.chips = currentChips - betAmount;
         await manager.save(user);
 
+        // Every bet feeds the Gema Royal pot - Math.max(1, ...) is deliberate: the smallest bet
+        // tier (10 chips, see FIXED_BET_VALUES) would round 1% down to 0 and never contribute
+        // otherwise.
+        const jackpotContribution = Math.max(
+          1,
+          Math.round(betAmount * MINES_JACKPOT_CONTRIBUTION_RATE),
+        );
+        const jackpot = await manager
+          .createQueryBuilder(MinesJackpot, 'jackpot')
+          .setLock('pessimistic_write')
+          .where('jackpot.id = :id', { id: MINES_JACKPOT_ID })
+          .getOne();
+        if (jackpot) {
+          jackpot.potAmount = (Number(jackpot.potAmount) || 0) + jackpotContribution;
+          await manager.save(jackpot);
+        }
+
         const round = manager.create(MinesRound, {
           userId,
           betAmount,
@@ -116,10 +151,12 @@ export class MinesService {
     }
   }
 
-  async revealTile(userId: string, dto: RevealTileDto) {
+  async revealTile(userId: string, dto: RevealTileDto): Promise<RevealTileResult> {
     const { roundId, tileIndex } = dto;
 
-    return this.dataSource.transaction(async (manager) => {
+    let winnerNick: string | null = null;
+
+    const result = await this.dataSource.transaction<RevealTileResult>(async (manager) => {
       const round = await manager
         .createQueryBuilder(MinesRound, 'round')
         .setLock('pessimistic_write')
@@ -144,10 +181,12 @@ export class MinesService {
         await manager.save(round);
 
         return {
-          result: 'bomb' as const,
+          result: 'bomb',
           busted: true,
           minePositions: round.minePositions,
           serverSeed: round.serverSeed,
+          jackpotWon: false,
+          jackpotAmount: 0,
         };
       }
 
@@ -157,13 +196,108 @@ export class MinesService {
       round.multiplierBp += round.incrementBp;
       await manager.save(round);
 
+      // Gema Royal: the jackpot row is locked here (same transaction, same "round -> jackpot ->
+      // user" lock order used everywhere else this pot is touched) so two players revealing a
+      // diamond at the same instant serialize on this row - only whichever transaction commits
+      // first still sees potAmount > 0, the other finds it already reset to 0 and wins nothing.
+      let jackpotWon = false;
+      let jackpotAmount = 0;
+      let updatedChips: number | undefined;
+
+      const jackpot = await manager
+        .createQueryBuilder(MinesJackpot, 'jackpot')
+        .setLock('pessimistic_write')
+        .where('jackpot.id = :id', { id: MINES_JACKPOT_ID })
+        .getOne();
+
+      if (jackpot && Number(jackpot.potAmount) > 0 && jackpot.nextEligibleAt <= new Date()) {
+        jackpotAmount = Number(jackpot.potAmount);
+        jackpotWon = true;
+
+        const winner = await manager
+          .createQueryBuilder(User, 'user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id: userId })
+          .getOne();
+        if (winner) {
+          winner.chips = (Number(winner.chips) || 0) + jackpotAmount;
+          await manager.save(winner);
+          updatedChips = winner.chips;
+          winnerNick = winner.nick;
+
+          await manager.save(
+            manager.create(ChipsAward, {
+              userId,
+              amount: jackpotAmount,
+              source: 'prize',
+              game: 'minas',
+            }),
+          );
+        }
+
+        jackpot.potAmount = 0;
+        jackpot.nextEligibleAt = new Date(Date.now() + MINES_JACKPOT_ELIGIBILITY_WINDOW_MS);
+        jackpot.lastWinnerUserId = userId;
+        jackpot.lastWinnerNick = winnerNick;
+        jackpot.lastWonAmount = jackpotAmount;
+        jackpot.lastWonAt = new Date();
+        await manager.save(jackpot);
+      }
+
       return {
-        result: 'diamond' as const,
+        result: 'diamond',
         busted: false,
         multiplier: round.multiplierBp / 10000,
         accumulatedWinnings: round.accumulatedWinnings,
+        jackpotWon,
+        jackpotAmount,
+        chips: updatedChips,
       };
     });
+
+    if (result.jackpotWon) {
+      await this.announceJackpotWin(winnerNick ?? 'Alguien', result.jackpotAmount);
+    }
+
+    return result;
+  }
+
+  /** Mirrors refreshMinasChatPresence()'s best-effort style (try/catch, only logs on failure,
+   *  never throws) - a jackpot win already fully happened and committed by the time this runs, a
+   *  hiccup announcing it shouldn't fail the reveal request that just paid out real chips. */
+  private async announceJackpotWin(nick: string, amount: number): Promise<void> {
+    try {
+      const room = await this.bingoService.ensureLobbyRoom('minas', 'Minas');
+      const entry = await this.bingoService.sendSystemMessage(
+        room.id,
+        `💎👑 ¡${nick} ganó la Gema Royal por ${amount} fichas!`,
+      );
+      this.bingoGateway.broadcastChatMessage(room.id, entry);
+      await this.bingoGateway.broadcastRoomState(room.id);
+    } catch (err: any) {
+      this.logger.warn(`Could not announce Gema Royal win: ${err?.message}`);
+    }
+  }
+
+  /** Current pot + when it next becomes claimable - polled by the client's Gema Royal panel. */
+  async getJackpotStatus() {
+    const jackpot = await this.dataSource.manager.findOne(MinesJackpot, {
+      where: { id: MINES_JACKPOT_ID },
+    });
+    const now = new Date();
+
+    return {
+      potAmount: jackpot ? Number(jackpot.potAmount) : 0,
+      nextEligibleAt: jackpot?.nextEligibleAt ?? null,
+      eligible: !!jackpot && jackpot.nextEligibleAt <= now,
+      lastWinner: jackpot?.lastWinnerNick
+        ? {
+            nick: jackpot.lastWinnerNick,
+            amount: Number(jackpot.lastWonAmount ?? 0),
+            wonAt: jackpot.lastWonAt,
+          }
+        : null,
+    };
   }
 
   async cashout(userId: string, dto: CashoutDto) {

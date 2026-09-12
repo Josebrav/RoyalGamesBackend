@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { MinesService } from './mines.service';
@@ -57,5 +57,13 @@ export class MinesController {
   @ApiOperation({ summary: 'Cash out the accumulated winnings of the active round' })
   async cashout(@CurrentUser() user: any, @Body() dto: CashoutDto) {
     return this.minesService.cashout(user.id, dto);
+  }
+
+  // No guard, same as SantaWildsController: the "Gema Royal" panel polls this from the WebGL
+  // client, which has no JWT of its own - read-only, leaks no user data.
+  @Get('jackpot')
+  @ApiOperation({ summary: 'Current Gema Royal pot amount and next-eligible-at timestamp' })
+  async jackpot() {
+    return this.minesService.getJackpotStatus();
   }
 }
