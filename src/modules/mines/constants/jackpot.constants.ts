@@ -5,7 +5,6 @@ export const MINES_JACKPOT_ID = '11111111-1111-1111-1111-111111111111';
 // Confirmed with product: 1% of every bet placed feeds the pot (see MinesService.startRound).
 export const MINES_JACKPOT_CONTRIBUTION_RATE = 0.01;
 
-// TESTING: 1 minute so the "about to drop" client-side warning effect (red blink + pulsing
-// number, see GemaRoyalUI.cs) can actually be watched end-to-end in a normal test session.
-// Switch to `2 * 60 * 60 * 1000` (2 hours, the real target) once confirmed working.
-export const MINES_JACKPOT_ELIGIBILITY_WINDOW_MS = 1 * 60 * 1000;
+// Confirmed working end-to-end at the 1-minute test setting (claim, chat announcement, red-blink
+// warning effect all verified 2026-09-13) - real value now: ~2 hours.
+export const MINES_JACKPOT_ELIGIBILITY_WINDOW_MS = 2 * 60 * 60 * 1000;

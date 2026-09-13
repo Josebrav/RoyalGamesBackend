@@ -397,9 +397,12 @@ export class MinesService {
   private async announceJackpotWin(nick: string, amount: number): Promise<void> {
     try {
       const room = await this.bingoService.ensureLobbyRoom('minas', 'Minas');
+      // Sin emojis a propósito: la fuente TMP que usa el chat de Minas no tiene esos glifos, y en
+      // vez de mostrar el resto del texto igual, puede llegar a romper el parseo del mensaje
+      // entero (sospecha directa de por qué el aviso no aparecía en pantalla).
       const entry = await this.bingoService.sendSystemMessage(
         room.id,
-        `💎👑 ¡${nick} ganó la Gema Royal por ${amount} fichas!`,
+        `¡${nick} ganó la Gema Royal por ${amount} fichas!`,
       );
       this.bingoGateway.broadcastChatMessage(room.id, entry);
       await this.bingoGateway.broadcastRoomState(room.id);
