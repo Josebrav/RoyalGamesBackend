@@ -5,6 +5,7 @@ import { MinesService } from './mines.service';
 import { StartRoundDto } from './dtos/start-round.dto';
 import { RevealTileDto } from './dtos/reveal-tile.dto';
 import { CashoutDto } from './dtos/cashout.dto';
+import { StartAndRevealDto } from './dtos/start-and-reveal.dto';
 import { DevSessionTokenDto } from './dtos/dev-session-token.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MinesSessionGuard } from '../../common/guards/mines-session.guard';
@@ -60,6 +61,18 @@ export class MinesController {
   @ApiOperation({ summary: 'Reveal one tile in the active round' })
   async reveal(@CurrentUser() user: any, @Body() dto: RevealTileDto) {
     return this.minesService.revealTile(user.id, dto);
+  }
+
+  // Combines start+reveal into the one request the client's first click of a round actually
+  // needs - see MinesService.startRoundAndReveal for why (this used to be two separate
+  // client<->server round trips back to back before anything appeared on screen).
+  @Post('start-and-reveal')
+  @UseGuards(MinesSessionGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Start a round and reveal its first tile in a single request' })
+  @ApiResponse({ status: 409, description: 'User already has an active round' })
+  async startAndReveal(@CurrentUser() user: any, @Body() dto: StartAndRevealDto) {
+    return this.minesService.startRoundAndReveal(user.id, dto);
   }
 
   @Post('cashout')

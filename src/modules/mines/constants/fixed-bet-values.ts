@@ -9,3 +9,9 @@ export const FIXED_BET_VALUES = [
 export const MIN_MINES_COUNT = 1;
 export const MAX_MINES_COUNT = 24;
 export const MINES_TILE_COUNT = 25;
+
+// House edge applied on top of the fair (0-edge) hypergeometric odds for revealing K safe tiles
+// out of MINES_TILE_COUNT with minesCount mines - see MinesService.fairMultiplierBp. Confirmed
+// with product: 5%. Keeping this separate from MINES_JACKPOT_CONTRIBUTION_RATE (jackpot.constants.ts)
+// on purpose - they're two independent cuts, not additive on top of each other.
+export const MINES_HOUSE_EDGE = 0.05;
