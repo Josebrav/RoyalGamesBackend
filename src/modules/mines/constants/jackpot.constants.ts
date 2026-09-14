@@ -5,6 +5,6 @@ export const MINES_JACKPOT_ID = '11111111-1111-1111-1111-111111111111';
 // Confirmed with product: 1% of every bet placed feeds the pot (see MinesService.startRound).
 export const MINES_JACKPOT_CONTRIBUTION_RATE = 0.01;
 
-// Back to the 1-minute test setting while tracking down the freeze/no-credit bug seen when the
-// gem lands (2026-09-14) - real value is 2 hours, restore that once it's confirmed fixed.
-export const MINES_JACKPOT_ELIGIBILITY_WINDOW_MS = 1 * 60 * 1000;
+// Real production value: ~2 hours. The freeze/no-credit bug seen when the gem lands (2026-09-14)
+// was announceJackpotWin being awaited instead of fire-and-forget - see revealTile.
+export const MINES_JACKPOT_ELIGIBILITY_WINDOW_MS = 2 * 60 * 60 * 1000;
