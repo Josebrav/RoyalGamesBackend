@@ -377,7 +377,13 @@ export class MinesService {
     }
 
     if (jackpotWon) {
-      await this.announceJackpotWin(winnerNick ?? 'Alguien', jackpotAmount);
+      // Fire-and-forget, same reasoning as refreshMinasChatPresence above: the chips were already
+      // credited and committed by the transaction above, so this request shouldn't make the
+      // client wait out several extra sequential chat/socket round trips before it can show the
+      // win - awaiting this here was adding real latency (and, if the client's request timed out
+      // waiting, made an already-successful jackpot credit look like it never happened, since the
+      // client never got a response to apply).
+      this.announceJackpotWin(winnerNick ?? 'Alguien', jackpotAmount);
     }
 
     return {
