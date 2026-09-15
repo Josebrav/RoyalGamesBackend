@@ -11,7 +11,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { MinesSessionGuard } from '../../common/guards/mines-session.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
-const SESSION_TOKEN_TTL_SECONDS = 300;
+const SESSION_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const DEV_SESSION_TOKEN_TTL_SECONDS = 4 * 60 * 60;
 
 // Both must hold, not just NODE_ENV != production: this route mints a real Mines session token
