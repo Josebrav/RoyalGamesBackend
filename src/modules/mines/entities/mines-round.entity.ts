@@ -9,7 +9,10 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
-export type MinesRoundStatus = 'active' | 'busted' | 'cashed_out';
+// 'abandoned': auto-resuelto por startRound cuando encuentra una ronda activa vieja sin ningún
+// diamante revelado (apuesta reembolsada) - separado de 'cashed_out' para no confundirlo con un
+// cobro real del jugador en vistas de actividad/admin. Ver MinesService.resolveStaleActiveRound.
+export type MinesRoundStatus = 'active' | 'busted' | 'cashed_out' | 'abandoned';
 
 // One row per Mines round. Mine layout and payout math live here and are computed
 // server-side (see MinesService) so the client can never dictate its own outcome or

@@ -89,7 +89,12 @@ export class MinesService {
    * "only one active round" enforcement - inserted_round's INSERT hits it exactly as before, and
    * the same PG_UNIQUE_VIOLATION catch below still converts that into the same ConflictException.
    */
-  async startRound(userId: string, dto: StartRoundDto) {
+  async startRound(userId: string, dto: StartRoundDto, retrying = false): Promise<{
+    roundId: string;
+    serverSeedHash: string;
+    multiplier: number;
+    chips: number;
+  }> {
     const { betAmount, minesCount } = dto;
 
     const minePositions = this.generateMinePositions(minesCount);
@@ -175,10 +180,76 @@ export class MinesService {
       };
     } catch (err: any) {
       if (err?.code === PG_UNIQUE_VIOLATION) {
+        // Self-heal instead of surfacing a 409 to the player (2026-09-15 incident: real players
+        // were hitting this in the live game whenever a round got orphaned - tab closed mid-round,
+        // a client crash, a dropped connection - since the client always calls start-and-reveal
+        // with no roundId of its own to resume. A stuck round used to need a dev to find and
+        // resolve it by hand in the DB every single time (see this file's git history / session
+        // notes) - not viable at real player volume. The old round already fully happened server
+        // side, so it's resolved exactly like a human admin would (see cashout/refund logic in
+        // resolveStaleActiveRound), then this same start is retried once. `retrying` guards
+        // against ever looping more than once - if it still conflicts after that (another request
+        // for the same user racing this one), the 409 is real and should surface.
+        if (!retrying) {
+          await this.resolveStaleActiveRound(userId);
+          return this.startRound(userId, dto, true);
+        }
         throw new ConflictException('You already have an active Mines round');
       }
       throw err;
     }
+  }
+
+  /**
+   * Auto-resolves a stale/orphaned active round so the player's next start isn't blocked by it -
+   * see the PG_UNIQUE_VIOLATION handling in startRound above. Mirrors exactly what a human admin
+   * did by hand for this same situation throughout development: pay out accumulatedWinnings if
+   * the round had real progress (same accounting as a normal cashout), otherwise refund the
+   * original bet (the player never lost it - the round just never got a chance to resolve) and
+   * mark it 'abandoned' rather than 'cashed_out' so it's not confused with a real player cashout
+   * in admin/activity views. Locked the same way every other jackpot/user mutation in this file
+   * is, so a genuinely concurrent request for the same user still serializes safely instead of
+   * double-crediting.
+   */
+  private async resolveStaleActiveRound(userId: string): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const round = await manager
+        .createQueryBuilder(MinesRound, 'round')
+        .setLock('pessimistic_write')
+        .where('round.userId = :userId', { userId })
+        .andWhere('round.status = :status', { status: 'active' })
+        .getOne();
+
+      // Already resolved by a concurrent request (or never existed) - nothing to do.
+      if (!round) return;
+
+      const winnings = Number(round.accumulatedWinnings) || 0;
+      if (winnings > 0) {
+        await manager.increment(User, { id: userId }, 'chips', winnings);
+        await manager.save(
+          manager.create(ChipsAward, {
+            userId,
+            amount: winnings,
+            source: 'game',
+            game: 'minas',
+          }),
+        );
+        round.status = 'cashed_out';
+      } else {
+        await manager.increment(User, { id: userId }, 'chips', Number(round.betAmount));
+        round.status = 'abandoned';
+      }
+      round.resolvedAt = new Date();
+      await manager.save(round);
+
+      this.logger.warn(
+        `Auto-resolved orphaned Mines round ${round.id} for user ${userId} (${winnings > 0 ? `paid out ${winnings}` : `refunded bet ${round.betAmount}`})`,
+      );
+    });
+
+    // Fire-and-forget - same reasoning as elsewhere in this file: the money movement above already
+    // committed, no reason to make the retried start() wait on chat presence too.
+    this.refreshMinasChatPresence();
   }
 
   /**
