@@ -69,6 +69,7 @@ export class PaymentsService {
       userId: params.userId,
       chips: params.chips,
       price: params.price,
+      currency: params.currency,
       paymentPlatform: 'mepago',
       mercadoPagoPreferenceId: preference.preferenceId,
       status: PaymentStatus.PENDING,
@@ -251,6 +252,9 @@ export class PaymentsService {
             pendingPayment.status = PaymentStatus.APPROVED;
             pendingPayment.mercadoPagoPaymentId = payment.id;
             pendingPayment.date = new Date().toISOString();
+            // Red de seguridad para pendientes creados antes de este fix (sin
+            // currency todavía): MercadoPago siempre trae la moneda real usada.
+            pendingPayment.currency = pendingPayment.currency || payment.currency_id || null;
             await manager.save(Pay, pendingPayment);
 
             this.logger.log(`Payment approved for user ${userId}: +${chips} chips`);
@@ -260,6 +264,7 @@ export class PaymentsService {
               userId,
               chips,
               price: payment.transaction_amount?.toString() || '0',
+              currency: payment.currency_id || null,
               paymentPlatform: 'mepago',
               mercadoPagoPaymentId: payment.id,
               mercadoPagoPreferenceId: preferenceId || payment.id,
@@ -403,6 +408,7 @@ export class PaymentsService {
               userId: capturePayPalOrderDto.userId,
               chips: capturePayPalOrderDto.chips,
               price: capturePayPalOrderDto.price,
+              currency: 'USD', // PayPal siempre cobra en USD en este flujo (ver createPayPalOrder)
               paymentPlatform: 'paypal',
               mercadoPagoPaymentId: paymentId,
               status: PaymentStatus.APPROVED,

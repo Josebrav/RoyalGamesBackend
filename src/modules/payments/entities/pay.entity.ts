@@ -26,6 +26,12 @@ export class Pay {
   @Column({ type: 'varchar' })
   price: string;
 
+  // Nullable a propósito: los pagos creados antes de este fix no tienen moneda
+  // registrada y no se puede reconstruir con certeza — se dejan en NULL en vez
+  // de adivinar. Todo pago nuevo (MercadoPago o PayPal) sí la trae.
+  @Column({ type: 'varchar', nullable: true })
+  currency: string | null;
+
   @Column({ type: 'bigint' })
   chips: number;
 
