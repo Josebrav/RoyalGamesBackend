@@ -1188,10 +1188,12 @@ export class BingoService {
     });
   }
 
-  /** Generic system chat message (ej. gift announcements) - distinct from announceWinners' more
-   *  specific winner-formatted messages, though both end up as the same
-   *  BingoChatMessageType.SYSTEM row. */
-  private async sendSystemMessage(roomId: string, message: string): Promise<ChatMessageEntry> {
+  /** Generic system chat message (ej. gift announcements, MinesService's Gema Royal winner
+   *  announcement) - distinct from announceWinners' more specific winner-formatted messages,
+   *  though both end up as the same BingoChatMessageType.SYSTEM row. Public: MinesService calls
+   *  this directly (it already injects BingoService/BingoGateway for the same reason
+   *  refreshMinasChatPresence does). */
+  async sendSystemMessage(roomId: string, message: string): Promise<ChatMessageEntry> {
     const entity = this.chatMessageRepository.create({
       roomId,
       playerId: null,

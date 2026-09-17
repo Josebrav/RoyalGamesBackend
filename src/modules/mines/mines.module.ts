@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { MinesRound } from './entities/mines-round.entity';
+import { MinesJackpot } from './entities/mines-jackpot.entity';
 import { User } from '../users/entities/user.entity';
 import { ChipsAward } from '../chips/entities/chips-award.entity';
 import { MinesController } from './mines.controller';
@@ -11,7 +12,7 @@ import { BingoModule } from '../bingo/bingo.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MinesRound, User, ChipsAward]),
+    TypeOrmModule.forFeature([MinesRound, User, ChipsAward, MinesJackpot]),
     // AuthModule only exports AuthService (not JwtModule), so this module registers its own
     // JwtService against the same JWT_SECRET to sign/verify Mines session tokens.
     JwtModule.register({

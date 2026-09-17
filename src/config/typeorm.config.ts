@@ -23,6 +23,14 @@ const config = {
   // forever and starve the connection pool for the whole app - it should error out instead.
   extra: {
     max: 10,
+    // node-postgres's pool default (idleTimeoutMillis: 10000) was silently closing pooled
+    // connections after just 10s idle - completely normal between two game actions (deciding a
+    // bet, looking at a result panel). The next query then had to pay for a brand new TCP+TLS
+    // handshake to a remote DB before running at all, which is what made latency feel
+    // inconsistent and made gaps between rounds specifically slow. `min` keeps a couple of
+    // connections permanently warm so there's always one ready regardless of idle time.
+    idleTimeoutMillis: 300000,
+    min: 2,
     statement_timeout: 15000,
     query_timeout: 15000,
     idle_in_transaction_session_timeout: 20000,

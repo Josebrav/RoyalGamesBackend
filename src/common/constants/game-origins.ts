@@ -13,6 +13,7 @@ export const ORIGIN_TO_GAME_SLUG: Record<string, string> = {
   'https://bingoroyal.s3.us-east-2.amazonaws.com': 'bingo',
   'https://santawilds.s3.us-east-2.amazonaws.com': 'santawilds',
   'https://royalslots.s3.us-east-2.amazonaws.com': 'royalslots',
+  'https://sugarcalavera.s3.us-east-1.amazonaws.com': 'sugarcalavera',
 };
 
 export function resolveGameSlugFromOrigin(origin: string | undefined | null): string | null {
