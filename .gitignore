@@ -49,3 +49,8 @@ temp/
 *.zip
 *.rar
 *.tar.gz
+
+
+# Internal docs (local only, not for GitHub)
+casino_functional_plan.md
+pasarelas_pago_royalgames.md
