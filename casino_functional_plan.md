@@ -2,6 +2,8 @@
 
 Este documento detalla el plan funcional y el diseño de entidades sugerido para transformar **RoyalGames** en una plataforma de casino online profesional, segura, escalable y atractiva. 
 
+> **Decisión de producto:** RoyalGames **no** permite retirar dinero real ni cambiar fichas por dinero — el usuario solo compra fichas y juega. Por eso este documento ya no contempla KYC ni Withdrawals; las secciones que las proponían quedan marcadas como **descartadas** más abajo, y el código correspondiente (entidad `Withdrawal`, relación en `User`, tabla `withdrawals`) fue removido.
+
 ---
 
 ## 👥 1. Roles y Funciones del Sistema
@@ -12,12 +14,12 @@ El jugador es el centro de la aplicación. Para ofrecer una experiencia premium 
 #### **A. Gestión de Cuenta y Seguridad**
 *   **Registro e Inicio de Sesión Seguro:** Registro con validación de correo electrónico, soporte de JWT y posibilidad de implementar **MFA (Autenticación de Dos Factores)** vía Google Authenticator o correo.
 *   **Gestión de Perfil:** Modificación de datos personales (nick, avatar, contraseña, país de origen, descripción) y verificación de mayoría de edad.
-*   **Verificación KYC (Know Your Customer):** Subida de documento de identidad (DNI, Pasaporte) requerida para habilitar retiros, asegurando el cumplimiento de normativas de prevención de lavado de dinero (AML).
+*   ~~**Verificación KYC (Know Your Customer)**~~ — **DESCARTADO.** No aplica: no hay retiros que habilitar ni obligación de AML, porque las fichas nunca se cambian por dinero real.
 
 #### **B. Monedero y Transacciones**
 *   **Depósito de Fichas (Compra):** Integración directa con pasarelas de pago automatizadas como **MercadoPago** (para monedas locales) y **PayPal** (internacional), con actualización instantánea de saldo tras la verificación del webhook.
-*   **Historial Transaccional:** Registro detallado de compras, depósitos, retiros y saldo actual en tiempo real.
-*   **Solicitud de Retiro (Withdrawals):** Capacidad para solicitar cambiar sus fichas/ganancias por dinero real, sujeto a aprobación administrativa y validación KYC.
+*   **Historial Transaccional:** Registro detallado de compras y depósitos en tiempo real.
+*   ~~**Solicitud de Retiro (Withdrawals)**~~ — **DESCARTADO.** El usuario compra fichas para jugar; no puede cambiarlas de vuelta por dinero real.
 
 #### **C. Experiencia de Juego**
 *   **Catálogo de Juegos Interactivo:** Navegación por categorías de juegos (Mina, Lotería, Ruleta, Pachinka, Bingo, etc.).
@@ -39,14 +41,14 @@ Los administradores necesitan herramientas completas para gestionar el riesgo, s
 *   **Búsqueda y Filtros Avanzados:** Buscar jugadores por email, nick, ID, saldo, país o estado (activo/baneado).
 *   **Control de Cuentas (Moderación):** Banear/Desbanear usuarios, marcar cuentas inactivas, ver el historial de inicio de sesión e IPs utilizadas (detección de cuentas duplicadas).
 *   **Gestión de Saldo Manual:** Capacidad de añadir o quitar fichas a un usuario específico (por ejemplo, para resolver reclamos o asignar premios especiales), registrando un log de auditoría obligatorio de quién realizó la acción.
-*   **Aprobación de KYC:** Panel para visualizar los documentos cargados por los usuarios, y aprobar o rechazar su nivel de verificación.
+*   ~~**Aprobación de KYC**~~ — **DESCARTADO** (no hay retiros que verificar).
 
 #### **B. Control Financiero y Auditoría**
-*   **Aprobación de Retiros:** Panel de solicitudes pendientes de retiro. El administrador revisa el comportamiento de apuestas del jugador y aprueba o rechaza el pago hacia su cuenta bancaria/monedero.
+*   ~~**Aprobación de Retiros**~~ — **DESCARTADO.** No existe un flujo de pago hacia el jugador; el dinero solo entra (compra de fichas).
 *   **Métricas Financieras en Tiempo Real (Dashboard):**
-    *   **GGR (Gross Gaming Revenue):** Total Apostado - Total Pagado en Premios.
-    *   **NGR (Net Gaming Revenue):** GGR - Bonos - Comisiones de Pasarelas.
-    *   **Volumen de depósitos y retiros:** Gráficos de ingresos semanales/mensuales.
+    *   **Ingresos por venta de fichas:** Total cobrado a través de las pasarelas de pago.
+    *   **Costos:** Bonos/fichas regaladas + comisiones de pasarelas.
+    *   **Volumen de depósitos:** Gráficos de ingresos semanales/mensuales.
 
 #### **C. Gestión y Ajustes de Juegos**
 *   **Administración del Catálogo:** Crear, editar y desactivar juegos (poner en mantenimiento).
@@ -76,8 +78,6 @@ Representa a los jugadores y administradores.
 *   `role` (ENUM: 'USER', 'ADMIN', 'MODERATOR')
 *   `banned` (BOOLEAN, Default false)
 *   `inactive` (BOOLEAN, Default false)
-*   `kycStatus` (ENUM: 'UNVERIFIED', 'PENDING', 'VERIFIED', 'REJECTED')
-*   `kycDocumentUrl` (VARCHAR, Nullable)
 *   `twoFactorSecret` (VARCHAR, Nullable) - *Para MFA*
 *   `selfExclusionUntil` (TIMESTAMP, Nullable) - *Fecha hasta la que el usuario está autoexcluido*
 *   `createdAt` (TIMESTAMP)
@@ -94,20 +94,9 @@ Registra las compras de fichas aprobadas o pendientes.
 *   `userId` (UUID, FK -> User.id)
 *   `createdAt` (TIMESTAMP)
 
-### 💸 2.3. Entidad: `Withdrawal` (Solicitudes de Retiro) [NUEVA]
-Indispensable para un casino real; permite a los usuarios retirar sus ganancias.
-*   `id` (UUID, PK)
-*   `userId` (UUID, FK -> User.id)
-*   `amountChips` (BIGINT) - *Fichas a retirar*
-*   `payoutAmount` (DECIMAL(10,2)) - *Dinero real equivalente a pagar*
-*   `currency` (VARCHAR)
-*   `paymentMethod` (VARCHAR, e.g., 'BANK_TRANSFER', 'PAYPAL')
-*   `payoutDetails` (JSON) - *CBU/CVU, alias, cuenta PayPal, etc.*
-*   `status` (ENUM: 'PENDING', 'APPROVED', 'REJECTED')
-*   `adminNotes` (TEXT, Nullable) - *Razón de rechazo si aplica*
-*   `processedById` (UUID, FK -> User.id, Nullable) - *Admin que procesó el retiro*
-*   `processedAt` (TIMESTAMP, Nullable)
-*   `createdAt` (TIMESTAMP)
+### 💸 2.3. ~~Entidad: `Withdrawal` (Solicitudes de Retiro)~~ — DESCARTADA
+
+Esta entidad y su tabla (`withdrawals`) fueron removidas del código: RoyalGames no ofrece retiro de dinero real, así que no hay ganancias que pagar de vuelta al jugador.
 
 ### 🎰 2.4. Entidad: `Game` (Juegos)
 *   `id` (UUID, PK)
