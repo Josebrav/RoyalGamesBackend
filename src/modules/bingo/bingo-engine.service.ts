@@ -132,6 +132,16 @@ export class BingoEngineService implements OnModuleInit {
       return;
     }
 
+    const ownerIds = await this.bingoService.getCardOwnerIds(game.id);
+    if (ownerIds.length < this.bingoService.minPlayersToStart) {
+      // Not enough DISTINCT players yet - one player buying every cartón in the room doesn't
+      // count as multiple players. Same "loop the countdown" treatment as the 0-cards case above,
+      // so the room keeps giving people a chance to join instead of starting short-handed.
+      await this.bingoService.restartPurchaseWindow(game.id);
+      await this.gateway.broadcastRoomState(roomId);
+      return;
+    }
+
     const started = await this.bingoService.startGame(game.id);
     if (started.state === BingoGameState.RUNNING) {
       await this.gateway.broadcastGameStarted(roomId, started.id);

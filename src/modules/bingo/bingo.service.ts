@@ -51,6 +51,9 @@ interface PlannedWinnerEvent {
 export class BingoService {
   private readonly logger = new Logger(BingoService.name);
   readonly purchaseWindowSeconds = 30;
+  /** A game can't start until at least this many DISTINCT players own a card - one player buying
+   * several cartones alone doesn't count as multiple players. */
+  readonly minPlayersToStart = 3;
 
   constructor(
     @InjectRepository(BingoPlayer)
