@@ -1,8 +1,11 @@
-import { Controller, Get, Query, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post, Query, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { MinesService } from '../mines/mines.service';
 import { BingoService } from '../bingo/bingo.service';
+import { BingoBotService } from '../bingo/bingo-bot.service';
+import { CreateBingoBotDto } from '../bingo/dtos/create-bingo-bot.dto';
+import { UpdateBingoBotDto } from '../bingo/dtos/update-bingo-bot.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,6 +22,7 @@ export class AdminController {
     private adminService: AdminService,
     private minesService: MinesService,
     private bingoService: BingoService,
+    private bingoBotService: BingoBotService,
   ) {}
 
   @Get('overview')
@@ -69,5 +73,44 @@ export class AdminController {
   @ApiOperation({ summary: 'Everything a specific mod did themselves — panel grants, self gifts, card gifts (Admin only)' })
   async getModAudit(@Param('modId', new ParseUUIDPipe()) modId: string) {
     return this.adminService.getModAudit(modId);
+  }
+
+  // --- Bots de Bingo (economía de la casa, solo admin — ver plan "Bots de Bingo") ---
+
+  @Get('bingo-bots')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'List all Bingo bots, with room name and live chip balance (Admin only)' })
+  async listBingoBots() {
+    return this.bingoBotService.listBots();
+  }
+
+  @Get('bingo-bots/rooms')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Bingo rooms available to assign a bot to (Admin only)' })
+  async listBingoBotRooms() {
+    return this.bingoService.getRooms();
+  }
+
+  @Post('bingo-bots')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Create a Bingo bot account and assign it to a room (Admin only)' })
+  async createBingoBot(@Body() dto: CreateBingoBotDto) {
+    return this.bingoBotService.createBot(dto);
+  }
+
+  @Patch('bingo-bots/:id')
+  @Roles(Role.ADMIN)
+  @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
+  @ApiOperation({ summary: 'Update a Bingo bot\'s settings, or pause/resume it (Admin only)' })
+  async updateBingoBot(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateBingoBotDto) {
+    return this.bingoBotService.updateBot(id, dto);
+  }
+
+  @Delete('bingo-bots/:id')
+  @Roles(Role.ADMIN)
+  @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
+  @ApiOperation({ summary: 'Unassign a bot from its room (Admin only)' })
+  async deleteBingoBot(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.bingoBotService.deleteBot(id);
   }
 }

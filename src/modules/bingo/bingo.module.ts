@@ -4,7 +4,9 @@ import { BingoController } from './bingo.controller';
 import { BingoService } from './bingo.service';
 import { BingoGateway } from './bingo.gateway';
 import { BingoEngineService } from './bingo-engine.service';
+import { BingoBotService } from './bingo-bot.service';
 import { BingoConnectionRegistry } from './ws/bingo-connection.registry';
+import { BingoRoomBot } from './entities/bingo-room-bot.entity';
 import { BingoPlayer } from './entities/bingo-player.entity';
 import { BingoRoom } from './entities/bingo-room.entity';
 import { BingoGame } from './entities/bingo-game.entity';
@@ -36,13 +38,15 @@ import { User } from '../users/entities/user.entity';
       BingoGiftedCardCredit,
       BingoNumberGuess,
       BingoAutoBuySubscription,
+      BingoRoomBot,
       User,
     ]),
   ],
   controllers: [BingoController],
-  providers: [BingoService, BingoGateway, BingoEngineService, BingoConnectionRegistry],
+  providers: [BingoService, BingoGateway, BingoEngineService, BingoBotService, BingoConnectionRegistry],
   // BingoGateway exported so other games' chip-moving flows (ej. MinesService) can push a fresh
   // room_state to their own isLobby chat channel after chips change - see MinesModule.
-  exports: [BingoService, BingoGateway],
+  // BingoBotService exported so AdminController can manage bots (crear/pausar/borrar).
+  exports: [BingoService, BingoGateway, BingoBotService],
 })
 export class BingoModule {}

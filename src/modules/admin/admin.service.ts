@@ -36,15 +36,17 @@ export class AdminService {
       topByChips,
       recentPayments,
     ] = await Promise.all([
-      this.usersRepository.count(),
+      this.usersRepository.count({ where: { isBot: false } }),
       this.usersRepository.count({ where: { banned: true } }),
       this.usersRepository.count({ where: { inactive: true } }),
       this.usersRepository.count({ where: { role: Role.ADMIN } }),
       this.usersRepository.count({ where: { role: Role.MOD } }),
       this.usersRepository.query(
-        `SELECT COUNT(*)::int AS count FROM users WHERE "lastSeen" > now() - interval '5 minutes'`,
+        `SELECT COUNT(*)::int AS count FROM users WHERE "lastSeen" > now() - interval '5 minutes' AND "isBot" = false`,
       ),
-      this.usersRepository.query(`SELECT COALESCE(SUM(chips), 0)::bigint AS total FROM users`),
+      // Excluye fichas de bots (BingoBotService las recarga gratis - no son parte real de la
+      // economía) para que este total no quede inflado artificialmente.
+      this.usersRepository.query(`SELECT COALESCE(SUM(chips), 0)::bigint AS total FROM users WHERE "isBot" = false`),
       this.paysRepository.query(
         `SELECT COALESCE(SUM(chips), 0)::bigint AS total FROM pays WHERE status = $1`,
         [PaymentStatus.APPROVED],
@@ -55,10 +57,10 @@ export class AdminService {
         [PaymentStatus.APPROVED],
       ),
       this.usersRepository.query(
-        `SELECT COUNT(*)::int AS count FROM users WHERE "createdAt" >= date_trunc('day', now())`,
+        `SELECT COUNT(*)::int AS count FROM users WHERE "createdAt" >= date_trunc('day', now()) AND "isBot" = false`,
       ),
       this.usersRepository.query(
-        `SELECT id, nick, chips, rank FROM users ORDER BY chips DESC LIMIT 10`,
+        `SELECT id, nick, chips, rank FROM users WHERE "isBot" = false ORDER BY chips DESC LIMIT 10`,
       ),
       this.paysRepository.query(
         `SELECT u.nick AS nick, p.chips AS chips, p.price AS price, p."paymentPlatform" AS "paymentPlatform", p."createdAt" AS "createdAt"

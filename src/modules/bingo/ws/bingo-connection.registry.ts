@@ -14,6 +14,10 @@ interface ConnectionMeta {
 export class BingoConnectionRegistry {
   private readonly roomSockets = new Map<string, Set<WebSocket>>();
   private readonly socketMeta = new Map<WebSocket, ConnectionMeta>();
+  // Bots no tienen un socket real (BingoBotService los juega llamando a BingoService directo, sin
+  // pasar por el gateway) — BingoBotService mantiene esto al día en cada tick para que igual
+  // aparezcan en la fila de jugadores/presencia de su sala, como si fueran una conexión más.
+  private readonly roomBotPlayerIds = new Map<string, Set<string>>();
 
   register(client: WebSocket, roomId: string, playerId: string, ipAddress: string | null = null): void {
     if (!this.roomSockets.has(roomId)) {
@@ -40,22 +44,38 @@ export class BingoConnectionRegistry {
     return this.socketMeta.get(client);
   }
 
+  /** Includes active bots (see setRoomBots) — this is what the room list's "24/100" badge reads,
+   *  and a bot-populated room should look just as occupied there as inside the room itself. */
   getRoomConnectionCount(roomId: string): number {
-    return this.roomSockets.get(roomId)?.size ?? 0;
+    return this.getRoomPlayerIds(roomId).length;
   }
 
-  /** Distinct players currently connected to a room (one player can have >1 socket open). */
-  getRoomPlayerIds(roomId: string): string[] {
-    const sockets = this.roomSockets.get(roomId);
-    if (!sockets) {
-      return [];
+  /** Called by BingoBotService every tick with the currently-active bots for a room (empty array
+   *  clears it) — the source of truth for "which bots to show as present" always lives there, this
+   *  is just where BingoGateway.buildPresence goes to read it. */
+  setRoomBots(roomId: string, botPlayerIds: string[]): void {
+    if (botPlayerIds.length === 0) {
+      this.roomBotPlayerIds.delete(roomId);
+      return;
     }
+    this.roomBotPlayerIds.set(roomId, new Set(botPlayerIds));
+  }
+
+  /** Distinct players currently "in" a room — real sockets plus any active bots (see setRoomBots),
+   *  since bots never open a real one but still need to show up in the room's presence list. */
+  getRoomPlayerIds(roomId: string): string[] {
     const ids = new Set<string>();
-    for (const socket of sockets) {
-      const meta = this.socketMeta.get(socket);
-      if (meta) {
-        ids.add(meta.playerId);
+    const sockets = this.roomSockets.get(roomId);
+    if (sockets) {
+      for (const socket of sockets) {
+        const meta = this.socketMeta.get(socket);
+        if (meta) {
+          ids.add(meta.playerId);
+        }
       }
+    }
+    for (const botId of this.roomBotPlayerIds.get(roomId) ?? []) {
+      ids.add(botId);
     }
     return Array.from(ids);
   }

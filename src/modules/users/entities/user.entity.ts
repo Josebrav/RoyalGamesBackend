@@ -83,6 +83,11 @@ export class User {
   @Column({ type: 'boolean', default: false })
   firstChips: boolean;
 
+  // Cuenta creada por BingoBotService (panel admin -> Bots de Bingo), no un jugador real. Se usa
+  // para excluirla de rankings/"conectados ahora"/totales del panel admin sin tocar esa lógica.
+  @Column({ type: 'boolean', default: false })
+  isBot: boolean;
+
   @Column({ type: 'enum', enum: RankTier, default: RankTier.BRONZE })
   rank: RankTier;
 
