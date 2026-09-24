@@ -1,10 +1,14 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Una fila = "este bot juega en esta sala, con esta configuración" (BingoBotService.tick lee esta
- * tabla cada ~4s). `userId`/`botPlayerId` son el User+BingoPlayer reales creados junto con esta
- * fila (ver BingoBotService.createBot) — el bot compra cartones y gana el pozo exactamente igual
- * que un jugador real, no hay tabla de fichas separada.
+ * Un bot (User + BingoPlayer reales, ver BingoBotService.createBot) es reutilizable: esta fila es
+ * su identidad + configuración, y `roomId` es la sala a la que está CONECTADO ahora mismo — NULL
+ * significa "desconectado" (existe, tiene su cuenta y fichas, pero no está jugando en ningún
+ * lado). BingoBotService.tick solo juega a los que tienen `roomId` seteado; conectar/desconectar
+ * simplemente cambia ese valor, sin tocar la cuenta ni el historial del bot.
+ *
+ * `roomId` con ON DELETE SET NULL (no CASCADE, a diferencia de userId/botPlayerId): si la sala se
+ * borra, el bot queda desconectado en vez de desaparecer — sigue siendo reutilizable.
  *
  * Correr con: npm run typeorm:migration:run
  */
@@ -17,12 +21,11 @@ export class CreateBingoRoomBots1790300001000 implements MigrationInterface {
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "userId" uuid NOT NULL,
         "botPlayerId" uuid NOT NULL,
-        "roomId" uuid NOT NULL,
+        "roomId" uuid NULL,
         "minCardsPerGame" integer NOT NULL DEFAULT 1,
         "maxCardsPerGame" integer NOT NULL DEFAULT 2,
         "autoTopUpThreshold" bigint NOT NULL DEFAULT 5000,
         "autoTopUpAmount" bigint NOT NULL DEFAULT 100000,
-        "isActive" boolean NOT NULL DEFAULT true,
         "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
         CONSTRAINT "PK_bingo_room_bots" PRIMARY KEY ("id")
       );
@@ -43,7 +46,7 @@ export class CreateBingoRoomBots1790300001000 implements MigrationInterface {
     await queryRunner.query(`
       DO $$ BEGIN
         ALTER TABLE "bingo_room_bots"
-          ADD CONSTRAINT "FK_bingo_room_bots_room" FOREIGN KEY ("roomId") REFERENCES "bingo_rooms"("id") ON DELETE CASCADE;
+          ADD CONSTRAINT "FK_bingo_room_bots_room" FOREIGN KEY ("roomId") REFERENCES "bingo_rooms"("id") ON DELETE SET NULL;
       EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     `);
 

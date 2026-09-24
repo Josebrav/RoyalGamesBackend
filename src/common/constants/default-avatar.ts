@@ -1,11 +1,11 @@
 /**
- * Snapshot of a fixed default avatar (image + Bazar layer composition), baked into the
+ * Snapshot of a fixed default avatar (image + Vestidor layer composition), baked into the
  * code at account-creation time. Intentionally NOT a live reference to any user's row —
  * if that user later changes their own avatar, new accounts already assigned this default
  * are unaffected, and future signups keep getting this exact snapshot.
  *
  * Regenerado a partir del avatar guardado por un usuario real (Josesito7) usando el sistema
- * de Bazar actualizado (piel clara #E6B996FF, captura en alta resolución). Reemplaza al
+ * de Vestidor actualizado (piel clara #E6B996FF, captura en alta resolución). Reemplaza al
  * default anterior (diseño viejo, baja resolución).
  */
 export const DEFAULT_AVATAR_MIME = 'image/png';

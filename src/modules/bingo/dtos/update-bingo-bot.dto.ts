@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, IsBoolean, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, Min, Max } from 'class-validator';
 
 export class UpdateBingoBotDto {
   @IsOptional()
@@ -22,8 +22,4 @@ export class UpdateBingoBotDto {
   @IsInt()
   @Min(0)
   autoTopUpAmount?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
 }

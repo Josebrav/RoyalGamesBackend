@@ -45,7 +45,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-const BAZAR_SESSION_TOKEN_TTL_SECONDS = 300;
+const VESTIDOR_SESSION_TOKEN_TTL_SECONDS = 300;
 
 @ApiTags('Users')
 @Controller()
@@ -56,20 +56,20 @@ export class UsersController {
   ) {}
 
   // Igual patrón que games/mines/session-token: la SPA (con sesión real, JwtAuthGuard) pide
-  // este token corto antes de abrir el iframe del editor de Bazar. Preparado pero TODAVÍA NO
+  // este token corto antes de abrir el iframe del editor del Vestidor. Preparado pero TODAVÍA NO
   // exigido en PUT user/:userId/avatar — esa app vive aparte en S3 y hay que actualizarla
   // primero para que pida y mande este token antes de activar el guard ahí (si no, se rompe
   // el guardado de avatar en producción). Ver memoria/plan de la Tarea 10.
-  @Post('bazar/session-token')
+  @Post('vestidor/session-token')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Mint a short-lived token the Bazar avatar editor uses to identify the player' })
-  async issueBazarSessionToken(@CurrentUser() user: any) {
+  @ApiOperation({ summary: 'Mint a short-lived token the Vestidor avatar editor uses to identify the player' })
+  async issueVestidorSessionToken(@CurrentUser() user: any) {
     const token = await this.jwtService.signAsync(
-      { sub: user.id, scope: 'bazar' },
-      { expiresIn: `${BAZAR_SESSION_TOKEN_TTL_SECONDS}s` },
+      { sub: user.id, scope: 'vestidor' },
+      { expiresIn: `${VESTIDOR_SESSION_TOKEN_TTL_SECONDS}s` },
     );
-    return { token, expiresIn: BAZAR_SESSION_TOKEN_TTL_SECONDS };
+    return { token, expiresIn: VESTIDOR_SESSION_TOKEN_TTL_SECONDS };
   }
 
   @Post('signup')

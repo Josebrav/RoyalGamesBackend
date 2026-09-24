@@ -1,12 +1,12 @@
 /**
  * Snapshot del avatar por defecto para cuentas MUJER (sexo === 'M'), equivalente al de
- * default-avatar.ts pero para el modelo femenino del Bazar. Igual que el masculino, es una
+ * default-avatar.ts pero para el modelo femenino del Vestidor. Igual que el masculino, es una
  * copia fija horneada en el código al momento de crear la cuenta — NO una referencia viva a
  * ninguna fila de usuario.
  *
  * Regenerado por scripts/generate-female-default-avatar.js a partir del avatar guardado por
  * la cuenta de prueba mujer 447740a8-b194-42ce-9292-f1b87a723570. Para volver a generarlo: guardar de nuevo ese avatar
- * en el Bazar y correr el script otra vez con el mismo id.
+ * en el Vestidor y correr el script otra vez con el mismo id.
  */
 
 export const DEFAULT_FEMALE_AVATAR_READY: boolean = true;

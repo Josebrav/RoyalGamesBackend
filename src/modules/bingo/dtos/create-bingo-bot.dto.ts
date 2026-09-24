@@ -7,8 +7,10 @@ export class CreateBingoBotDto {
   @IsIn(['H', 'M'])
   sexo: string;
 
+  // Opcional: si se omite, el bot se crea desconectado (reutilizable después con /connect).
+  @IsOptional()
   @IsUUID()
-  roomId: string;
+  roomId?: string;
 
   @IsOptional()
   @IsInt()

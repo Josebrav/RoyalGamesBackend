@@ -4,9 +4,11 @@ import { BingoPlayer } from './bingo-player.entity';
 import { BingoRoom } from './bingo-room.entity';
 
 /**
- * "Este bot juega en esta sala" — leída por BingoBotService cada ~4s. userId/botPlayerId son un
- * User + BingoPlayer reales (creados en BingoBotService.createBot), así el bot compra cartones y
- * gana el pozo pasando por el mismo BingoService.purchaseCard que usa cualquier jugador humano.
+ * Un bot reutilizable — userId/botPlayerId son un User + BingoPlayer reales (creados en
+ * BingoBotService.createBot) que persisten sin importar a qué sala esté conectado. `roomId` es la
+ * sala a la que está CONECTADO ahora mismo; null = desconectado (existe, tiene fichas, no juega en
+ * ningún lado). Conectar/desconectar solo cambia este campo — BingoBotService.tick juega a los que
+ * tienen `roomId` seteado, pasando por el mismo BingoService.purchaseCard que usa un humano.
  */
 @Entity('bingo_room_bots')
 @Index(['roomId'])
@@ -28,12 +30,15 @@ export class BingoRoomBot {
   @JoinColumn({ name: 'botPlayerId' })
   botPlayer: BingoPlayer;
 
-  @Column({ type: 'uuid' })
-  roomId: string;
+  // Sala a la que está conectado ahora - null = desconectado (ver comentario de la clase).
+  // ON DELETE SET NULL (no CASCADE): si la sala se borra, el bot queda desconectado en vez de
+  // desaparecer, sigue siendo reutilizable.
+  @Column({ type: 'uuid', nullable: true })
+  roomId: string | null;
 
-  @ManyToOne(() => BingoRoom, { onDelete: 'CASCADE' })
+  @ManyToOne(() => BingoRoom, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'roomId' })
-  room: BingoRoom;
+  room: BingoRoom | null;
 
   @Column({ type: 'int', default: 1 })
   minCardsPerGame: number;
@@ -48,9 +53,6 @@ export class BingoRoomBot {
 
   @Column({ type: 'bigint', default: 100000 })
   autoTopUpAmount: number;
-
-  @Column({ type: 'boolean', default: true })
-  isActive: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

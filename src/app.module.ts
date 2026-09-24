@@ -21,6 +21,7 @@ import { MinesModule } from './modules/mines/mines.module';
 import { SiteContentModule } from './modules/site-content/site-content.module';
 import { NewsModule } from './modules/news/news.module';
 import { BannerSlidesModule } from './modules/banner-slides/banner-slides.module';
+import { TrophiesModule } from './modules/trophies/trophies.module';
 import { SantaWildsModule } from './modules/santawilds/santawilds.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -61,6 +62,7 @@ import { AppService } from './app.service';
     SiteContentModule,
     NewsModule,
     BannerSlidesModule,
+    TrophiesModule,
     SantaWildsModule,
   ],
   controllers: [AppController],

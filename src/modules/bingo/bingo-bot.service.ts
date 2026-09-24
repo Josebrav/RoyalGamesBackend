@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, IsNull, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { BingoService } from './bingo.service';
 import { BingoGateway } from './bingo.gateway';
@@ -8,6 +8,7 @@ import { BingoConnectionRegistry } from './ws/bingo-connection.registry';
 import { BingoRoomBot } from './entities/bingo-room-bot.entity';
 import { CreateBingoBotDto } from './dtos/create-bingo-bot.dto';
 import { UpdateBingoBotDto } from './dtos/update-bingo-bot.dto';
+import { ConnectBingoBotDto } from './dtos/connect-bingo-bot.dto';
 import { User } from '../users/entities/user.entity';
 import { PasswordUtils } from '../../common/utils/password.utils';
 import { DEFAULT_AVATAR_BUFFER, DEFAULT_AVATAR_MIME, DEFAULT_AVATAR_DATA, DEFAULT_AVATAR_THUMB_BUFFER } from '../../common/constants/default-avatar';
@@ -71,13 +72,15 @@ export class BingoBotService implements OnModuleInit {
     }
     this.locked = true;
     try {
-      const bots = await this.botRepository.find({ where: { isActive: true } });
+      const bots = await this.botRepository.find({ where: { roomId: Not(IsNull()) } });
       this.refreshPresence(bots);
 
+      // bot.roomId no puede ser null acá: el find() de arriba ya filtró por roomId IS NOT NULL.
       const byRoom = new Map<string, BingoRoomBot[]>();
       for (const bot of bots) {
-        if (!byRoom.has(bot.roomId)) byRoom.set(bot.roomId, []);
-        byRoom.get(bot.roomId)!.push(bot);
+        const roomId = bot.roomId as string;
+        if (!byRoom.has(roomId)) byRoom.set(roomId, []);
+        byRoom.get(roomId)!.push(bot);
       }
 
       for (const [roomId, roomBots] of byRoom) {
@@ -93,10 +96,12 @@ export class BingoBotService implements OnModuleInit {
   /** Mantiene BingoConnectionRegistry al día con qué bots están activos en cada sala, para que
    *  BingoGateway.buildPresence los muestre igual que a un jugador con socket real. */
   private refreshPresence(bots: BingoRoomBot[]): void {
+    // bots ya viene filtrado a roomId IS NOT NULL por el caller (tick).
     const byRoom = new Map<string, string[]>();
     for (const bot of bots) {
-      if (!byRoom.has(bot.roomId)) byRoom.set(bot.roomId, []);
-      byRoom.get(bot.roomId)!.push(bot.botPlayerId);
+      const roomId = bot.roomId as string;
+      if (!byRoom.has(roomId)) byRoom.set(roomId, []);
+      byRoom.get(roomId)!.push(bot.botPlayerId);
     }
     // Solo tocamos las salas que tuvieron (o tienen) bots activos en esta vuelta - no hace falta
     // recorrer todas las salas del sistema para "limpiar" las que nunca tuvieron uno.
@@ -236,14 +241,47 @@ export class BingoBotService implements OnModuleInit {
       this.botRepository.create({
         userId: user.id,
         botPlayerId: player.id,
-        roomId: dto.roomId,
+        // undefined -> el bot queda desconectado (reutilizable después con connectBot).
+        roomId: dto.roomId ?? null,
         minCardsPerGame: dto.minCardsPerGame ?? 1,
         maxCardsPerGame: dto.maxCardsPerGame ?? 2,
         autoTopUpThreshold: dto.autoTopUpThreshold ?? 5000,
         autoTopUpAmount: dto.autoTopUpAmount ?? 100000,
-        isActive: true,
       }),
     );
+  }
+
+  /** Conecta un bot ya existente a una sala (la misma en la que estaba, o una distinta) — es lo
+   *  que hace reutilizable a un bot en vez de tener que crear uno nuevo cada vez. */
+  async connectBot(id: string, dto: ConnectBingoBotDto): Promise<BingoRoomBot> {
+    const bot = await this.botRepository.findOne({ where: { id } });
+    if (!bot) {
+      throw new NotFoundException('Bot not found');
+    }
+    bot.roomId = dto.roomId;
+    return this.botRepository.save(bot);
+  }
+
+  /** Saca al bot de la sala en la que esté jugando ahora, sin borrar la cuenta ni su
+   *  configuración — queda listo para reconectarse a la misma sala o a otra distinta. */
+  async disconnectBot(id: string): Promise<BingoRoomBot> {
+    const bot = await this.botRepository.findOne({ where: { id } });
+    if (!bot) {
+      throw new NotFoundException('Bot not found');
+    }
+    const previousRoomId = bot.roomId;
+    bot.roomId = null;
+    const saved = await this.botRepository.save(bot);
+    // Si no se hace esto, el bot sigue apareciendo en la presencia de esa sala hasta el próximo
+    // tick (hasta 4s) — lo sacamos ya mismo para que el "Desconectar" se sienta instantáneo. Ojo:
+    // esto solo borra a ESTE bot de esa sala si es el único ahí conectado - si hay otros bots
+    // activos en la misma sala, se re-agregan solos en el próximo tick (refreshPresence corre
+    // sobre TODOS los bots conectados, no reemplaza selectivamente uno).
+    if (previousRoomId) {
+      const stillThere = await this.botRepository.find({ where: { roomId: previousRoomId } });
+      this.registry.setRoomBots(previousRoomId, stillThere.map((b) => b.botPlayerId));
+    }
+    return saved;
   }
 
   /** Lista para la tabla del panel admin: nombre de sala + saldo de fichas en vivo, además de la
@@ -266,12 +304,12 @@ export class BingoBotService implements OnModuleInit {
       nick: userById.get(bot.userId)?.nick ?? '(cuenta eliminada)',
       chips: Number(userById.get(bot.userId)?.chips ?? 0),
       roomId: bot.roomId,
-      roomName: roomById.get(bot.roomId)?.name ?? '(sala eliminada)',
+      roomName: bot.roomId ? (roomById.get(bot.roomId)?.name ?? '(sala eliminada)') : null,
+      connected: bot.roomId != null,
       minCardsPerGame: bot.minCardsPerGame,
       maxCardsPerGame: bot.maxCardsPerGame,
       autoTopUpThreshold: Number(bot.autoTopUpThreshold),
       autoTopUpAmount: Number(bot.autoTopUpAmount),
-      isActive: bot.isActive,
       createdAt: bot.createdAt,
     }));
   }
@@ -285,14 +323,23 @@ export class BingoBotService implements OnModuleInit {
     return this.botRepository.save(bot);
   }
 
+  /** Borrado definitivo de la cuenta del bot — no es "sacarlo de la sala" (eso es disconnectBot,
+   *  que no borra nada y lo deja reutilizable). Esto es para cuando el bot ya no hace falta nunca
+   *  más. El BingoPlayer y su historial de partidas/premios quedan (igual que si se borrara la
+   *  cuenta de un jugador real), solo pierden el link al User borrado. */
   async deleteBot(id: string): Promise<{ success: boolean }> {
     const bot = await this.botRepository.findOne({ where: { id } });
     if (!bot) {
       throw new NotFoundException('Bot not found');
     }
+    const previousRoomId = bot.roomId;
+    const userId = bot.userId;
     await this.botRepository.remove(bot);
-    // No borramos el User/BingoPlayer: su historial de partidas/premios queda intacto, solo deja
-    // de jugar en esta sala. Si algún día se lo reasigna a otra sala, hay que crearlo de nuevo.
+    await this.userRepository.delete({ id: userId });
+    if (previousRoomId) {
+      const stillThere = await this.botRepository.find({ where: { roomId: previousRoomId } });
+      this.registry.setRoomBots(previousRoomId, stillThere.map((b) => b.botPlayerId));
+    }
     return { success: true };
   }
 }

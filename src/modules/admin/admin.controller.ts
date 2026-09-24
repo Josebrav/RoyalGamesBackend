@@ -6,6 +6,7 @@ import { BingoService } from '../bingo/bingo.service';
 import { BingoBotService } from '../bingo/bingo-bot.service';
 import { CreateBingoBotDto } from '../bingo/dtos/create-bingo-bot.dto';
 import { UpdateBingoBotDto } from '../bingo/dtos/update-bingo-bot.dto';
+import { ConnectBingoBotDto } from '../bingo/dtos/connect-bingo-bot.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -101,15 +102,31 @@ export class AdminController {
   @Patch('bingo-bots/:id')
   @Roles(Role.ADMIN)
   @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: 'Update a Bingo bot\'s settings, or pause/resume it (Admin only)' })
+  @ApiOperation({ summary: "Update a Bingo bot's cards/auto-top-up settings (Admin only)" })
   async updateBingoBot(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateBingoBotDto) {
     return this.bingoBotService.updateBot(id, dto);
+  }
+
+  @Post('bingo-bots/:id/connect')
+  @Roles(Role.ADMIN)
+  @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
+  @ApiOperation({ summary: 'Connect an existing (reusable) bot to a room — same one or a different one (Admin only)' })
+  async connectBingoBot(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ConnectBingoBotDto) {
+    return this.bingoBotService.connectBot(id, dto);
+  }
+
+  @Post('bingo-bots/:id/disconnect')
+  @Roles(Role.ADMIN)
+  @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
+  @ApiOperation({ summary: 'Disconnect a bot from its current room without deleting it — stays reusable (Admin only)' })
+  async disconnectBingoBot(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.bingoBotService.disconnectBot(id);
   }
 
   @Delete('bingo-bots/:id')
   @Roles(Role.ADMIN)
   @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: 'Unassign a bot from its room (Admin only)' })
+  @ApiOperation({ summary: 'Permanently delete a bot account (Admin only)' })
   async deleteBingoBot(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.bingoBotService.deleteBot(id);
   }
