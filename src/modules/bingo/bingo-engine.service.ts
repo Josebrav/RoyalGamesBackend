@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { BingoService } from './bingo.service';
 import { BingoGateway } from './bingo.gateway';
+import { BingoBotChatService } from './bingo-bot-chat.service';
 import { BingoGame, BingoGameState } from './entities/bingo-game.entity';
 import { BingoWinner } from './entities/bingo-winner.entity';
 import { deriveGameProgress, getPurchaseWindowRemaining } from './bingo-time.util';
@@ -37,6 +38,7 @@ export class BingoEngineService implements OnModuleInit {
   constructor(
     private readonly bingoService: BingoService,
     private readonly gateway: BingoGateway,
+    private readonly botChatService: BingoBotChatService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -179,6 +181,11 @@ export class BingoEngineService implements OnModuleInit {
       // - a fresh room_state is what actually delivers those updated balances to everyone's chat
       // player list (presence.chips), not just the chat message announcing it.
       await this.gateway.broadcastRoomState(roomId);
+      // Best-effort: algún bot chattyEnabled de la sala festeja el premio (ver
+      // BingoBotChatService.reactToPrize) - nunca debe poder frenar el anuncio real si falla.
+      this.botChatService.reactToPrize(roomId).catch((err) =>
+        this.logger.warn(`Bot reactToPrize failed for room=${roomId}: ${(err as Error).message}`),
+      );
     }
 
     if (!progress.isFinished) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Patch, Post, Query, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Patch, Post, Put, Query, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { MinesService } from '../mines/mines.service';
@@ -7,6 +7,11 @@ import { BingoBotService } from '../bingo/bingo-bot.service';
 import { CreateBingoBotDto } from '../bingo/dtos/create-bingo-bot.dto';
 import { UpdateBingoBotDto } from '../bingo/dtos/update-bingo-bot.dto';
 import { ConnectBingoBotDto } from '../bingo/dtos/connect-bingo-bot.dto';
+import { MinesBotService } from '../bots/mines-bot.service';
+import { UnityGameBotService } from '../bots/unity-game-bot.service';
+import { UpsertMinesBotConfigDto } from '../bots/dtos/upsert-mines-bot-config.dto';
+import { UpsertUnityBotConfigDto } from '../bots/dtos/upsert-unity-bot-config.dto';
+import { UNITY_BOT_GAME_SLUGS } from '../bots/constants/unity-bot-games';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -24,12 +29,14 @@ export class AdminController {
     private minesService: MinesService,
     private bingoService: BingoService,
     private bingoBotService: BingoBotService,
+    private minesBotService: MinesBotService,
+    private unityGameBotService: UnityGameBotService,
   ) {}
 
   @Get('overview')
   @ApiOperation({ summary: 'Platform-wide stats overview (money figures admin-only, rest also visible to mods)' })
-  async getOverview(@CurrentUser() user: { role: Role }) {
-    return this.adminService.getOverview(user.role);
+  async getOverview(@CurrentUser() user: { role: Role }, @Query('includeBots') includeBots?: string) {
+    return this.adminService.getOverview(user.role, includeBots === 'true');
   }
 
   @Get('deposits')
@@ -129,5 +136,51 @@ export class AdminController {
   @ApiOperation({ summary: 'Permanently delete a bot account (Admin only)' })
   async deleteBingoBot(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.bingoBotService.deleteBot(id);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Bots en Minas — mismo registro de bots (bingo_room_bots), config aparte por juego
+  // ---------------------------------------------------------------------------------------------
+
+  @Get('mines-bots')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'List every bot with its Mines config (Admin only)' })
+  async listMinesBots() {
+    return this.minesBotService.listConfigs();
+  }
+
+  @Put('mines-bots/:botId')
+  @Roles(Role.ADMIN)
+  @ApiParam({ name: 'botId', description: 'BingoRoomBot UUID' })
+  @ApiOperation({ summary: 'Upsert a bot\'s Mines config (Admin only)' })
+  async upsertMinesBot(@Param('botId', new ParseUUIDPipe()) botId: string, @Body() dto: UpsertMinesBotConfigDto) {
+    return this.minesBotService.upsertConfig(botId, dto);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Bots en los juegos Unity — actividad de fichas simulada, un slug por juego
+  // ---------------------------------------------------------------------------------------------
+
+  @Get('unity-bots')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'List every bot with its Unity-game activity config, one row per bot (Admin only)' })
+  async listUnityBots() {
+    return this.unityGameBotService.listConfigs();
+  }
+
+  @Put('unity-bots/:botId/:gameSlug')
+  @Roles(Role.ADMIN)
+  @ApiParam({ name: 'botId', description: 'BingoRoomBot UUID' })
+  @ApiParam({ name: 'gameSlug', description: 'One of the 5 Unity game slugs' })
+  @ApiOperation({ summary: "Upsert a bot's activity config for one Unity game (Admin only)" })
+  async upsertUnityBot(
+    @Param('botId', new ParseUUIDPipe()) botId: string,
+    @Param('gameSlug') gameSlug: string,
+    @Body() dto: UpsertUnityBotConfigDto,
+  ) {
+    if (!UNITY_BOT_GAME_SLUGS.includes(gameSlug as any)) {
+      throw new BadRequestException('Unknown gameSlug');
+    }
+    return this.unityGameBotService.upsertConfig(botId, gameSlug, dto);
   }
 }

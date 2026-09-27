@@ -21,7 +21,15 @@ export class AdminService {
     private bingoService: BingoService,
   ) {}
 
-  async getOverview(callerRole?: Role) {
+  async getOverview(callerRole?: Role, includeBots = false) {
+    // Los 5 lugares de abajo excluían bots por default (fichas gratis de BingoBotService no son
+    // parte real de la economía). `includeBots` los deja sumar cuando el panel lo pide
+    // explícitamente, sin tocar el comportamiento default. Son queries crudas (.query()), así que
+    // el filtro se arma como fragmento de string estático según el flag, nunca interpolando el
+    // booleano en sí.
+    const botFilterWhere = includeBots ? '' : ' WHERE "isBot" = false';
+    const botFilterAnd = includeBots ? '' : ' AND "isBot" = false';
+
     const [
       totalUsers,
       bannedUsers,
@@ -36,17 +44,17 @@ export class AdminService {
       topByChips,
       recentPayments,
     ] = await Promise.all([
-      this.usersRepository.count({ where: { isBot: false } }),
+      this.usersRepository.count({ where: includeBots ? {} : { isBot: false } }),
       this.usersRepository.count({ where: { banned: true } }),
       this.usersRepository.count({ where: { inactive: true } }),
       this.usersRepository.count({ where: { role: Role.ADMIN } }),
       this.usersRepository.count({ where: { role: Role.MOD } }),
       this.usersRepository.query(
-        `SELECT COUNT(*)::int AS count FROM users WHERE "lastSeen" > now() - interval '5 minutes' AND "isBot" = false`,
+        `SELECT COUNT(*)::int AS count FROM users WHERE "lastSeen" > now() - interval '5 minutes'${botFilterAnd}`,
       ),
       // Excluye fichas de bots (BingoBotService las recarga gratis - no son parte real de la
-      // economía) para que este total no quede inflado artificialmente.
-      this.usersRepository.query(`SELECT COALESCE(SUM(chips), 0)::bigint AS total FROM users WHERE "isBot" = false`),
+      // economía) para que este total no quede inflado artificialmente, salvo que se pida incluirlas.
+      this.usersRepository.query(`SELECT COALESCE(SUM(chips), 0)::bigint AS total FROM users${botFilterWhere}`),
       this.paysRepository.query(
         `SELECT COALESCE(SUM(chips), 0)::bigint AS total FROM pays WHERE status = $1`,
         [PaymentStatus.APPROVED],
@@ -57,10 +65,10 @@ export class AdminService {
         [PaymentStatus.APPROVED],
       ),
       this.usersRepository.query(
-        `SELECT COUNT(*)::int AS count FROM users WHERE "createdAt" >= date_trunc('day', now()) AND "isBot" = false`,
+        `SELECT COUNT(*)::int AS count FROM users WHERE "createdAt" >= date_trunc('day', now())${botFilterAnd}`,
       ),
       this.usersRepository.query(
-        `SELECT id, nick, chips, rank FROM users WHERE "isBot" = false ORDER BY chips DESC LIMIT 10`,
+        `SELECT id, nick, chips, rank FROM users${botFilterWhere} ORDER BY chips DESC LIMIT 10`,
       ),
       this.paysRepository.query(
         `SELECT u.nick AS nick, p.chips AS chips, p.price AS price, p."paymentPlatform" AS "paymentPlatform", p."createdAt" AS "createdAt"

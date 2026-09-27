@@ -54,6 +54,17 @@ export class BingoRoomBot {
   @Column({ type: 'bigint', default: 100000 })
   autoTopUpAmount: number;
 
+  // Habilita comprar cartones también en `BingoBotExtraRoom`s del bot (además de `roomId`) y
+  // cambiar de sala principal ocasionalmente — ver BingoBotService.tick/refreshPresence. En false,
+  // el bot se comporta exactamente igual que antes (solo su sala principal).
+  @Column({ type: 'boolean', default: false })
+  mobilityEnabled: boolean;
+
+  // Habilita comentarios de chat al azar (saludo/reacción/festejo de premio) — ver
+  // BingoBotChatService.
+  @Column({ type: 'boolean', default: false })
+  chattyEnabled: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -5,8 +5,11 @@ import { BingoService } from './bingo.service';
 import { BingoGateway } from './bingo.gateway';
 import { BingoEngineService } from './bingo-engine.service';
 import { BingoBotService } from './bingo-bot.service';
+import { BingoBotChatService } from './bingo-bot-chat.service';
 import { BingoConnectionRegistry } from './ws/bingo-connection.registry';
 import { BingoRoomBot } from './entities/bingo-room-bot.entity';
+import { BingoBotExtraRoom } from './entities/bingo-bot-extra-room.entity';
+import { BingoBotPhraseLog } from './entities/bingo-bot-phrase-log.entity';
 import { BingoPlayer } from './entities/bingo-player.entity';
 import { BingoRoom } from './entities/bingo-room.entity';
 import { BingoGame } from './entities/bingo-game.entity';
@@ -21,9 +24,11 @@ import { BingoGiftedCardCredit } from './entities/bingo-gifted-card-credit.entit
 import { BingoNumberGuess } from './entities/bingo-number-guess.entity';
 import { BingoAutoBuySubscription } from './entities/bingo-auto-buy-subscription.entity';
 import { User } from '../users/entities/user.entity';
+import { BotsModule } from '../bots/bots.module';
 
 @Module({
   imports: [
+    BotsModule,
     TypeOrmModule.forFeature([
       BingoPlayer,
       BingoRoom,
@@ -39,11 +44,13 @@ import { User } from '../users/entities/user.entity';
       BingoNumberGuess,
       BingoAutoBuySubscription,
       BingoRoomBot,
+      BingoBotExtraRoom,
+      BingoBotPhraseLog,
       User,
     ]),
   ],
   controllers: [BingoController],
-  providers: [BingoService, BingoGateway, BingoEngineService, BingoBotService, BingoConnectionRegistry],
+  providers: [BingoService, BingoGateway, BingoEngineService, BingoBotService, BingoBotChatService, BingoConnectionRegistry],
   // BingoGateway exported so other games' chip-moving flows (ej. MinesService) can push a fresh
   // room_state to their own isLobby chat channel after chips change - see MinesModule.
   // BingoBotService exported so AdminController can manage bots (crear/pausar/borrar).
