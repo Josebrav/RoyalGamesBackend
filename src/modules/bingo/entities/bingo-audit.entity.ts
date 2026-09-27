@@ -34,7 +34,16 @@ export class BingoAudit {
   @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToOne(() => BingoGame, (game) => game.audits, { nullable: true, onDelete: 'SET NULL' })
+  // entityId es polimorfico (entityType dice a que tabla apunta: 'bingo_room', 'bingo_game',
+  // etc. - ver BingoService.createAudit) - createForeignKeyConstraints:false es obligatorio aca,
+  // si no un dataSource.synchronize() (el fallback de main.ts cuando fallan las migraciones)
+  // vuelve a agregar una FK real a bingo_games que rompe cualquier auditoria de otro tipo de
+  // entidad (ver la migracion DropBingoAuditGameForeignKey1791000000000).
+  @ManyToOne(() => BingoGame, (game) => game.audits, {
+    nullable: true,
+    onDelete: 'SET NULL',
+    createForeignKeyConstraints: false,
+  })
   @JoinColumn({ name: 'entityId', referencedColumnName: 'id' })
   game: BingoGame;
 }
