@@ -58,7 +58,10 @@ export class BingoBotChatService {
       if (this.isOnCooldown(bot.id)) return;
 
       const today = this.todayDateString();
-      const usedToday = await this.phraseLogRepository.find({ where: { botId: bot.id, usedOnDate: today } });
+      // Global, no por bot: una frase que ya dijo CUALQUIER bot hoy queda afuera para todos (ver
+      // comentario de la entidad) - si no, con varios bots activos se termina notando que dos
+      // dicen exactamente lo mismo el mismo día.
+      const usedToday = await this.phraseLogRepository.find({ where: { usedOnDate: today } });
       const usedKeys = new Set(usedToday.map((u) => u.phraseKey));
 
       const candidates = BOT_CHAT_PHRASES[category].filter((p) => !usedKeys.has(p.key));

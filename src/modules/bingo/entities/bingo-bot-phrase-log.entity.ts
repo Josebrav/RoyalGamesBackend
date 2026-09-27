@@ -1,11 +1,14 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { BingoRoomBot } from './bingo-room-bot.entity';
 
-/** Qué `phraseKey` ya usó un bot en qué día — así BingoBotChatService nunca repite la misma frase
- *  dos veces el mismo día para el mismo bot. Se guarda la clave, no el texto, para poder retocar
- *  la redacción del pool sin "desbloquear" nada ya usado. */
+/** Qué `phraseKey` ya se usó en qué día — GLOBAL, no por bot: así BingoBotChatService nunca repite
+ *  la misma frase dos veces el mismo día sin importar qué bot la diga (con varios bots activos,
+ *  una restricción por-bot dejaba que dos bots distintos dijeran lo mismo el mismo día y se
+ *  notara). `botId` queda solo a fines de registro/debug, no participa de la restricción única.
+ *  Se guarda la clave, no el texto, para poder retocar la redacción del pool sin "desbloquear"
+ *  nada ya usado. */
 @Entity('bingo_bot_phrase_log')
-@Unique(['botId', 'phraseKey', 'usedOnDate'])
+@Unique(['phraseKey', 'usedOnDate'])
 export class BingoBotPhraseLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
