@@ -9,6 +9,10 @@ export const ALLOWED_ORIGINS = [
   'https://royaljoker1.s3.us-east-2.amazonaws.com',
   'https://royalgames.lat',
   'https://www.royalgames.lat',
+  // Sitios en inglés/portugués (repos separados RoyalFrontNew-EN/-PT, mismo backend). Nombres
+  // reales que asignó Vercel (distintos de lo que se había supuesto al principio).
+  'https://royal-front-new-en.vercel.app',
+  'https://royal-front-new-pt.vercel.app',
   'https://minasroyal.s3.us-east-2.amazonaws.com',
   'https://baazaar.s3.us-east-2.amazonaws.com',
   'https://bingoroyal.s3.us-east-2.amazonaws.com',
