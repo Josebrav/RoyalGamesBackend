@@ -102,6 +102,23 @@ export class BingoConnectionRegistry {
     }
   }
 
+  /** Closes every open socket a specific player has in a room right now - used by the "expulsar
+   *  de la sala" moderation action (see BingoGateway.handleModeratePlayer). The player's own
+   *  handleDisconnect fires normally from this (unregister + broadcastRoomState), same as if they
+   *  had closed the tab themselves. Re-joining is blocked separately, at handleConnection, by
+   *  BingoService.isPlayerBanned - closing the socket here only ends the CURRENT session. */
+  disconnectPlayer(roomId: string, playerId: string, code: number, reason: string): void {
+    const sockets = this.roomSockets.get(roomId);
+    if (!sockets) {
+      return;
+    }
+    for (const socket of sockets) {
+      if (this.socketMeta.get(socket)?.playerId === playerId) {
+        socket.close(code, reason);
+      }
+    }
+  }
+
   broadcastToRoom(roomId: string, envelope: WsEnvelope, exclude?: WebSocket): void {
     const sockets = this.roomSockets.get(roomId);
     if (!sockets) {

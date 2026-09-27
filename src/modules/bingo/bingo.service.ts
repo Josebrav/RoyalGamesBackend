@@ -4,9 +4,10 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, MoreThan, Repository } from 'typeorm';
 import { BingoPlayer, BingoPlayerStatus } from './entities/bingo-player.entity';
 import { BingoRoom, BingoRoomType } from './entities/bingo-room.entity';
 import { BingoGame, BingoGameState } from './entities/bingo-game.entity';
@@ -20,7 +21,10 @@ import { BingoChatMessage, BingoChatMessageType } from './entities/bingo-chat-me
 import { BingoGiftedCardCredit } from './entities/bingo-gifted-card-credit.entity';
 import { BingoNumberGuess } from './entities/bingo-number-guess.entity';
 import { BingoAutoBuySubscription } from './entities/bingo-auto-buy-subscription.entity';
+import { BingoRoomBan } from './entities/bingo-room-ban.entity';
+import { BingoRoomMute } from './entities/bingo-room-mute.entity';
 import { User } from '../users/entities/user.entity';
+import { FriendsService } from '../friends/friends.service';
 import { CreatePlayerDto } from './dtos/create-player.dto';
 import { CreateRoomDto } from './dtos/create-room.dto';
 import { CreateGameDto } from './dtos/create-game.dto';
@@ -82,13 +86,21 @@ export class BingoService {
     private readonly numberGuessRepository: Repository<BingoNumberGuess>,
     @InjectRepository(BingoAutoBuySubscription)
     private readonly autoBuySubscriptionRepository: Repository<BingoAutoBuySubscription>,
+    @InjectRepository(BingoRoomBan)
+    private readonly roomBanRepository: Repository<BingoRoomBan>,
+    @InjectRepository(BingoRoomMute)
+    private readonly roomMuteRepository: Repository<BingoRoomMute>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly friendsService: FriendsService,
   ) {}
 
   private static readonly CHAT_MESSAGE_MAX_LENGTH = 500;
   private static readonly CHAT_HISTORY_LIMIT = 50;
   private static readonly MAX_PLAYER_LEVEL = 500;
+  /** Cuánto dura un kick (no poder reconectarse a ESA sala) o un silencio (no poder mandar chat) -
+   *  ver moderatePlayer. */
+  private static readonly MODERATION_DURATION_MINUTES = 15;
 
   /** Cumulative lifetime cards needed to REACH `level` (level 1 needs 0 - everyone starts there).
    *  Each level costs a bit more than the last to reach: level N->N+1 alone needs 5 + 7*(N-1)
@@ -1228,6 +1240,115 @@ export class BingoService {
   }
 
   // ---------------------------------------------------------------------
+  // Chat: "añadir amigo" y moderación (expulsar/silenciar) desde el menú de un nick
+  // ---------------------------------------------------------------------
+
+  /** Puente para el "añadir amigo" del chat: el cliente Unity no maneja JWT (se conecta solo con
+   *  roomId+playerId, ver BingoGateway), así que en vez de pegarle a /friends/request (que exige
+   *  login) esto resuelve los dos User.id reales detrás de cada BingoPlayer y llama al mismo
+   *  FriendsService que usa la web - misma validación (bloqueos, ya-son-amigos, etc.), sin nick
+   *  de por medio (BingoPlayer.username puede estar desactualizado respecto al User.nick real). */
+  async sendFriendRequestFromPlayer(
+    fromPlayerId: string,
+    targetPlayerId: string,
+  ): Promise<{ fromDisplayName: string; toDisplayName: string }> {
+    if (fromPlayerId === targetPlayerId) {
+      throw new BadRequestException('No podés agregarte a vos mismo como amigo');
+    }
+
+    const [fromPlayer, targetPlayer] = await Promise.all([
+      this.playerRepository.findOne({ where: { id: fromPlayerId } }),
+      this.playerRepository.findOne({ where: { id: targetPlayerId } }),
+    ]);
+    if (!fromPlayer) {
+      throw new NotFoundException('Player not found');
+    }
+    if (!targetPlayer) {
+      throw new NotFoundException('Target player not found');
+    }
+    if (!fromPlayer.userId || !targetPlayer.userId) {
+      throw new BadRequestException('Uno de los dos jugadores no está vinculado a una cuenta');
+    }
+
+    await this.friendsService.sendRequestByUserId(fromPlayer.userId, targetPlayer.userId);
+
+    return {
+      fromDisplayName: fromPlayer.displayName ?? fromPlayer.username,
+      toDisplayName: targetPlayer.displayName ?? targetPlayer.username,
+    };
+  }
+
+  async isPlayerBanned(roomId: string, playerId: string): Promise<boolean> {
+    const active = await this.roomBanRepository.findOne({
+      where: { roomId, playerId, expiresAt: MoreThan(new Date()) },
+    });
+    return !!active;
+  }
+
+  async isPlayerMuted(roomId: string, playerId: string): Promise<boolean> {
+    const active = await this.roomMuteRepository.findOne({
+      where: { roomId, playerId, expiresAt: MoreThan(new Date()) },
+    });
+    return !!active;
+  }
+
+  /** "Expulsar de la sala" (bloquea reconectarse a ESTA sala por MODERATION_DURATION_MINUTES, ver
+   *  BingoGateway.handleConnection) o "silenciar" (bloquea chat_send por el mismo tiempo, ver
+   *  handleChatSend) - solo admin/mod pueden llamar esto, chequeado acá contra el rol REAL del
+   *  User vinculado (no algo que el cliente pueda falsear mandando un flag). */
+  async moderatePlayer(
+    actingPlayerId: string,
+    roomId: string,
+    targetPlayerId: string,
+    action: 'kick' | 'mute',
+  ): Promise<{ chatEntry: ChatMessageEntry; targetPlayerId: string; action: 'kick' | 'mute' }> {
+    if (action !== 'kick' && action !== 'mute') {
+      throw new BadRequestException('Acción de moderación inválida');
+    }
+    if (actingPlayerId === targetPlayerId) {
+      throw new BadRequestException('No podés moderarte a vos mismo');
+    }
+
+    const [actingPlayer, targetPlayer] = await Promise.all([
+      this.playerRepository.findOne({ where: { id: actingPlayerId }, relations: ['user'] }),
+      this.playerRepository.findOne({ where: { id: targetPlayerId } }),
+    ]);
+    if (!actingPlayer) {
+      throw new NotFoundException('Player not found');
+    }
+    if (!targetPlayer) {
+      throw new NotFoundException('Target player not found');
+    }
+
+    const role = actingPlayer.user?.role;
+    if (role !== 'admin' && role !== 'mod') {
+      throw new ForbiddenException('No tenés permisos para moderar jugadores');
+    }
+
+    const expiresAt = new Date(Date.now() + BingoService.MODERATION_DURATION_MINUTES * 60 * 1000);
+    const targetName = targetPlayer.displayName ?? targetPlayer.username;
+    const actingName = actingPlayer.displayName ?? actingPlayer.username;
+
+    if (action === 'kick') {
+      await this.roomBanRepository.save(
+        this.roomBanRepository.create({ roomId, playerId: targetPlayerId, actedByPlayerId: actingPlayerId, expiresAt }),
+      );
+    } else {
+      await this.roomMuteRepository.save(
+        this.roomMuteRepository.create({ roomId, playerId: targetPlayerId, actedByPlayerId: actingPlayerId, expiresAt }),
+      );
+    }
+
+    const message =
+      action === 'kick'
+        ? `${targetName} fue expulsado de la sala por ${actingName} (${BingoService.MODERATION_DURATION_MINUTES} min).`
+        : `${targetName} fue silenciado por ${actingName} (${BingoService.MODERATION_DURATION_MINUTES} min).`;
+    const chatEntry = await this.sendSystemMessage(roomId, message);
+
+    return { chatEntry, targetPlayerId, action };
+  }
+
+  // ---------------------------------------------------------------------
   // "Guess the first number" mini-game
   // ---------------------------------------------------------------------
 
@@ -1970,6 +2091,10 @@ export class BingoService {
 
     const player = await this.getPlayer(playerId);
     const role = player.userId ? (await this.userRoleFor(player.userId)) : null;
+
+    if (await this.isPlayerMuted(roomId, playerId)) {
+      throw new ForbiddenException('MUTED');
+    }
 
     const entity = this.chatMessageRepository.create({
       roomId,

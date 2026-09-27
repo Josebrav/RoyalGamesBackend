@@ -6,10 +6,12 @@ import { BingoService } from './bingo.service';
 import { BingoConnectionRegistry } from './ws/bingo-connection.registry';
 import { isOriginAllowed } from '../../config/cors-origins';
 import {
+  AddFriendMessage,
   BuyCardsMessage,
   ChatSendMessage,
   GiftCardsMessage,
   GuessNumberMessage,
+  ModeratePlayerMessage,
   SetAutoBuyMessage,
   PresenceEntry,
   RoomStatePayload,
@@ -44,6 +46,11 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       await this.bingoService.getPlayer(playerId);
       const room = await this.bingoService.getRoom(roomId);
+
+      if (await this.bingoService.isPlayerBanned(roomId, playerId)) {
+        client.close(4009, 'BANNED');
+        return;
+      }
 
       this.registry.register(client, roomId, playerId, this.extractClientIp(request));
       client.on('message', (raw: WebSocket.RawData) => this.handleMessage(client, raw));
@@ -128,6 +135,12 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
         case 'cancel_auto_buy':
           await this.handleCancelAutoBuy(meta.roomId, meta.playerId);
           break;
+        case 'add_friend':
+          await this.handleAddFriend(meta.roomId, meta.playerId, envelope.payload as AddFriendMessage);
+          break;
+        case 'moderate_player':
+          await this.handleModeratePlayer(meta.roomId, meta.playerId, envelope.payload as ModeratePlayerMessage);
+          break;
         case 'ping':
           this.registry.sendTo(client, { type: 'pong', payload: { serverTime: new Date().toISOString() } });
           break;
@@ -136,7 +149,7 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     } catch (error) {
       const message = (error as Error).message ?? 'Unexpected error';
-      const code = message === 'INSUFFICIENT_CHIPS' ? 'INSUFFICIENT_CHIPS' : 'REQUEST_FAILED';
+      const code = message === 'INSUFFICIENT_CHIPS' || message === 'MUTED' ? message : 'REQUEST_FAILED';
       this.sendError(client, code, message);
     }
   }
@@ -196,6 +209,24 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
    *  winner announcement from BingoEngineService) instead of a message a player actually typed. */
   broadcastChatMessage(roomId: string, entry: import('./ws/ws-message.types').ChatMessageEntry): void {
     this.registry.broadcastToRoom(roomId, { type: 'chat_message', payload: entry });
+  }
+
+  private async handleAddFriend(roomId: string, playerId: string, payload: AddFriendMessage): Promise<void> {
+    await this.bingoService.sendFriendRequestFromPlayer(playerId, payload?.targetPlayerId);
+    this.registry.sendToPlayer(roomId, playerId, { type: 'friend_request_sent', payload: {} });
+  }
+
+  private async handleModeratePlayer(roomId: string, playerId: string, payload: ModeratePlayerMessage): Promise<void> {
+    const { chatEntry, targetPlayerId, action } = await this.bingoService.moderatePlayer(
+      playerId,
+      roomId,
+      payload?.targetPlayerId,
+      payload?.action,
+    );
+    this.registry.broadcastToRoom(roomId, { type: 'chat_message', payload: chatEntry });
+    if (action === 'kick') {
+      this.registry.disconnectPlayer(roomId, targetPlayerId, 4009, 'BANNED');
+    }
   }
 
   async broadcastRoomState(roomId: string): Promise<void> {

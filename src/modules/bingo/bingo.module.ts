@@ -23,12 +23,16 @@ import { BingoChatMessage } from './entities/bingo-chat-message.entity';
 import { BingoGiftedCardCredit } from './entities/bingo-gifted-card-credit.entity';
 import { BingoNumberGuess } from './entities/bingo-number-guess.entity';
 import { BingoAutoBuySubscription } from './entities/bingo-auto-buy-subscription.entity';
+import { BingoRoomBan } from './entities/bingo-room-ban.entity';
+import { BingoRoomMute } from './entities/bingo-room-mute.entity';
 import { User } from '../users/entities/user.entity';
 import { BotsModule } from '../bots/bots.module';
+import { FriendsModule } from '../friends/friends.module';
 
 @Module({
   imports: [
     BotsModule,
+    FriendsModule,
     TypeOrmModule.forFeature([
       BingoPlayer,
       BingoRoom,
@@ -46,6 +50,8 @@ import { BotsModule } from '../bots/bots.module';
       BingoRoomBot,
       BingoBotExtraRoom,
       BingoBotPhraseLog,
+      BingoRoomBan,
+      BingoRoomMute,
       User,
     ]),
   ],

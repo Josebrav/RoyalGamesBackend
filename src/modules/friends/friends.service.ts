@@ -55,6 +55,22 @@ export class FriendsService {
 
   async sendRequest(requesterId: string, targetNick: string): Promise<Friendship> {
     const target = await this.findUserByNick(targetNick);
+    return this.sendRequestToUser(requesterId, target);
+  }
+
+  /** Same flow as sendRequest, resolving the target by userId instead of nick - used by
+   * BingoGateway's "añadir amigo" chat action, where the caller already knows the target's real
+   * User.id (from BingoPlayer.userId) but not necessarily their current nick (BingoPlayer.username
+   * can drift from the linked User.nick after a rename). */
+  async sendRequestByUserId(requesterId: string, targetUserId: string): Promise<Friendship> {
+    const target = await this.usersRepository.findOne({ where: { id: targetUserId } });
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+    return this.sendRequestToUser(requesterId, target);
+  }
+
+  private async sendRequestToUser(requesterId: string, target: User): Promise<Friendship> {
     if (target.id === requesterId) {
       throw new BadRequestException('No puedes agregarte a ti mismo como amigo');
     }

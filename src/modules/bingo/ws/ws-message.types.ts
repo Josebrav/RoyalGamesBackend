@@ -44,6 +44,18 @@ export interface SetAutoBuyMessage {
   totalGames: number;
 }
 
+/** "Añadir amigo" desde el menú de un nick en el chat - ver BingoService.sendFriendRequestFromPlayer. */
+export interface AddFriendMessage {
+  targetPlayerId: string;
+}
+
+/** "Expulsar de la sala" o "silenciar" desde el menú de un nick - solo admin/mod, ver
+ *  BingoService.moderatePlayer. */
+export interface ModeratePlayerMessage {
+  targetPlayerId: string;
+  action: 'kick' | 'mute';
+}
+
 // ---- Server -> Client ----
 
 export interface PlayerSummary {
