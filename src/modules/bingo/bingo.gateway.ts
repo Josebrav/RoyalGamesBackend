@@ -47,8 +47,21 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.bingoService.getPlayer(playerId);
       const room = await this.bingoService.getRoom(roomId);
 
-      if (await this.bingoService.isPlayerBanned(roomId, playerId)) {
-        client.close(4009, 'BANNED');
+      // Sent as a normal 'error' message (not just a raw close code) - browsers/WebGL don't
+      // reliably deliver custom WebSocket close codes to the client, so relying on that alone
+      // left kicked players stuck retrying a connection that kept getting rejected instead of
+      // ever finding out why (see BingoSocketClient.OnServerError, already used everywhere else
+      // for this exact reason).
+      const banMinutesRemaining = await this.bingoService.getActiveBanRemainingMinutes(roomId, playerId);
+      if (banMinutesRemaining !== null) {
+        this.registry.sendTo(client, {
+          type: 'error',
+          payload: {
+            code: 'BANNED',
+            message: `Fuiste expulsado de esta sala. Podés volver a intentar en ${banMinutesRemaining} minuto${banMinutesRemaining === 1 ? '' : 's'}.`,
+          },
+        });
+        client.close(1000, 'BANNED');
         return;
       }
 
@@ -217,7 +230,7 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private async handleModeratePlayer(roomId: string, playerId: string, payload: ModeratePlayerMessage): Promise<void> {
-    const { chatEntry, targetPlayerId, action } = await this.bingoService.moderatePlayer(
+    const { chatEntry, targetPlayerId, action, durationMinutes, actingName } = await this.bingoService.moderatePlayer(
       playerId,
       roomId,
       payload?.targetPlayerId,
@@ -225,7 +238,15 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
     this.registry.broadcastToRoom(roomId, { type: 'chat_message', payload: chatEntry });
     if (action === 'kick') {
-      this.registry.disconnectPlayer(roomId, targetPlayerId, 4009, 'BANNED');
+      // Targeted message BEFORE cutting the socket - see BingoGateway.handleConnection's comment
+      // on why this can't just rely on the WebSocket close code reaching the client intact.
+      this.registry.sendToPlayer(roomId, targetPlayerId, {
+        type: 'kicked',
+        payload: {
+          message: `${actingName} te expulsó de la sala. Podés volver a intentar en ${durationMinutes} minuto${durationMinutes === 1 ? '' : 's'}.`,
+        },
+      });
+      this.registry.disconnectPlayer(roomId, targetPlayerId, 1000, 'KICKED');
     }
   }
 

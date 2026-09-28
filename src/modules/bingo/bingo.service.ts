@@ -1285,6 +1285,20 @@ export class BingoService {
     return !!active;
   }
 
+  /** Same check as isPlayerBanned, but also tells the caller how many minutes are left - used to
+   *  build the "no podés entrar por X minutos" message when a kicked player tries to reconnect
+   *  (see BingoGateway.handleConnection). Null means not currently banned. */
+  async getActiveBanRemainingMinutes(roomId: string, playerId: string): Promise<number | null> {
+    const active = await this.roomBanRepository.findOne({
+      where: { roomId, playerId, expiresAt: MoreThan(new Date()) },
+      order: { expiresAt: 'DESC' },
+    });
+    if (!active) {
+      return null;
+    }
+    return Math.max(1, Math.ceil((active.expiresAt.getTime() - Date.now()) / 60000));
+  }
+
   async isPlayerMuted(roomId: string, playerId: string): Promise<boolean> {
     const active = await this.roomMuteRepository.findOne({
       where: { roomId, playerId, expiresAt: MoreThan(new Date()) },
@@ -1301,7 +1315,13 @@ export class BingoService {
     roomId: string,
     targetPlayerId: string,
     action: 'kick' | 'mute',
-  ): Promise<{ chatEntry: ChatMessageEntry; targetPlayerId: string; action: 'kick' | 'mute' }> {
+  ): Promise<{
+    chatEntry: ChatMessageEntry;
+    targetPlayerId: string;
+    action: 'kick' | 'mute';
+    durationMinutes: number;
+    actingName: string;
+  }> {
     if (action !== 'kick' && action !== 'mute') {
       throw new BadRequestException('Acción de moderación inválida');
     }
@@ -1345,7 +1365,7 @@ export class BingoService {
         : `${targetName} fue silenciado por ${actingName} (${BingoService.MODERATION_DURATION_MINUTES} min).`;
     const chatEntry = await this.sendSystemMessage(roomId, message);
 
-    return { chatEntry, targetPlayerId, action };
+    return { chatEntry, targetPlayerId, action, durationMinutes: BingoService.MODERATION_DURATION_MINUTES, actingName };
   }
 
   // ---------------------------------------------------------------------
