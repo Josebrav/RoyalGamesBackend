@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import typeOrmConfig from './config/typeorm.config';
 import { AuthModule } from './modules/auth/auth.module';
@@ -43,6 +45,13 @@ import { AppService } from './app.service';
         return typeormConfig;
       },
     }),
+    // Global rate limiting (ver Trello "Rate Limiting y Protección de Endpoints"): 100 peticiones
+    // por minuto por IP para cualquier endpoint. Login/registro/pagos pisan este límite a 5/min
+    // con @Throttle({ default: { limit: 5, ttl: 60000 } }) en cada controller puntual — un solo
+    // throttler nombrado 'default' en vez de uno nuevo "strict", porque con más de un throttler
+    // nombrado acá los dos se aplicarían a la vez a TODAS las rutas (el guard chequea todos los
+    // configurados salvo que se salteen con @SkipThrottle), no es una alternativa por ruta.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
     AuthModule,
     UsersModule,
     GamesModule,
@@ -66,6 +75,9 @@ import { AppService } from './app.service';
     SantaWildsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

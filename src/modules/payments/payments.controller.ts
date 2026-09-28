@@ -13,6 +13,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -38,6 +39,7 @@ export class PaymentsController {
 
   // ============= MERCADOPAGO =============
   @Post('mepago/create-order/:country')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create MercadoPago order using a country-specific seller account',
@@ -109,6 +111,7 @@ export class PaymentsController {
 
   // ============= PAYPAL =============
   @Post('paypal/create-order')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create PayPal order' })
@@ -119,6 +122,7 @@ export class PaymentsController {
   }
 
   @Post('capture-paypal-order')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Capture PayPal order' })

@@ -6,6 +6,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
 import morgan from 'morgan';
 import cors from 'cors';
+import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 import { WsAdapter } from '@nestjs/platform-ws';
@@ -63,6 +64,18 @@ async function bootstrap() {
 
   // Middleware
   app.use(morgan('dev'));
+  app.use(
+    helmet({
+      // Esta API nunca sirve HTML propio salvo Swagger (/api/docs, con sus propios scripts/estilos
+      // inline) — una CSP default de helmet rompe esa página sin proteger nada real acá (no hay
+      // contenido de usuario que renderizar).
+      contentSecurityPolicy: false,
+      // Los 3 frontends (es/en/pt, dominios de Vercel distintos) consumen imágenes de este backend
+      // cross-origin a propósito (avatar-image, avatar-thumbnail, etc.) - el "same-origin" que
+      // pone helmet por default bloquearía esas cargas en el navegador.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(cookieParser());
   app.use(
     cors({
