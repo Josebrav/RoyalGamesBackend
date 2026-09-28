@@ -9,6 +9,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { MailingModule } from '../mailing/mailing.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MailingModule } from '../mailing/mailing.module';
       signOptions: { expiresIn: (process.env.ACCESS_TOKEN_TTL || '6h') as any },
     }),
     MailingModule,
+    UsersModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

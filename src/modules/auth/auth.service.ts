@@ -13,6 +13,9 @@ import { PasswordUtils } from '../../common/utils/password.utils';
 import { LoginDto } from './dtos/login.dto';
 import { MailingService } from '../mailing/mailing.service';
 import { DEFAULT_AVATAR_BUFFER, DEFAULT_AVATAR_MIME, DEFAULT_AVATAR_DATA } from '../../common/constants/default-avatar';
+import { UsersRepository } from '../users/repositories/users.repository';
+import { FIRST_100_USERS_BONUS } from '../users/users.service';
+import { extractClientIp } from '../../common/utils/ip.util';
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://royalgames.lat';
@@ -31,6 +34,7 @@ export class AuthService {
     private resetTokenRepository: Repository<PasswordResetToken>,
     @InjectRepository(RefreshToken)
     private refreshTokenRepository: Repository<RefreshToken>,
+    private usersRepo: UsersRepository,
     private jwtService: JwtService,
     private mailingService: MailingService,
   ) {
@@ -182,31 +186,19 @@ export class AuthService {
 
       user = await this.usersRepository.save(user);
 
-      // Otorgar fichas iniciales atómicamente (solo a los primeros 100 usuarios)
-      const updated = await this.usersRepository.query(
-        `UPDATE users SET chips = chips + $1, "firstChips" = true
-         WHERE id = $2
-         AND ("firstChips" = false OR "firstChips" IS NULL)
-         AND (SELECT COUNT(*) FROM users WHERE "firstChips" = true) < 100
-         RETURNING *`,
-        [1000000, user.id],
+      // Otorgar fichas iniciales atómicamente (solo a los primeros 100 usuarios, una vez por IP —
+      // ver UsersRepository.giveFirstChipsAtomic, el mismo método que usa el registro normal, en
+      // vez de duplicar esta lógica acá con su propio SQL como antes).
+      const updatedUser = await this.usersRepo.giveFirstChipsAtomic(
+        user.id,
+        FIRST_100_USERS_BONUS,
+        req ? extractClientIp(req) : null,
       );
 
-      let updatedUserRow: any = null;
-      if (Array.isArray(updated)) {
-        if (Array.isArray(updated[0]) && updated[0].length > 0) {
-          updatedUserRow = updated[0][0];
-        } else if (updated.length > 0 && typeof updated[0] === 'object' && !Array.isArray(updated[0]) && Object.keys(updated[0]).length > 0) {
-          updatedUserRow = updated[0];
-        }
-      }
-
-      if (updatedUserRow && updatedUserRow.id) {
-        user = updatedUserRow as User;
+      if (updatedUser) {
+        user = updatedUser;
         firstChipsReceived = true;
       }
-
-
     }
 
     // 4. Generar tokens propios de Royal Games

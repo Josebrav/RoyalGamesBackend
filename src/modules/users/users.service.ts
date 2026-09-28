@@ -24,6 +24,10 @@ import { MailingService } from '../mailing/mailing.service';
 import * as crypto from 'crypto';
 
 const REFERRAL_SIGNUP_BONUS = 1000000;
+// Regalo de bienvenida para los primeros 100 usuarios en registrarse — un solo lugar para el
+// monto, usado por createUser, giveFirstChips y AuthService.loginWithGoogle (los 3 caminos que
+// pueden otorgarlo), en vez de repetir el número en cada uno.
+export const FIRST_100_USERS_BONUS = 100000;
 
 @Injectable()
 export class UsersService {
@@ -50,7 +54,7 @@ export class UsersService {
     return code;
   }
 
-  async createUser(createUserDto: CreateUserDto): Promise<Partial<User> & { firstChipsReceived: boolean }> {
+  async createUser(createUserDto: CreateUserDto, ipAddress: string | null = null): Promise<Partial<User> & { firstChipsReceived: boolean }> {
     const { referredByCode, ...userData } = createUserDto;
 
     const emailLowerCase = createUserDto.email.toLowerCase();
@@ -132,11 +136,11 @@ export class UsersService {
       referredBy,
     });
 
-    // Grant first chips atomically (only for first 100 users)
-    const updatedUser = await this.usersRepository.giveFirstChipsAtomic(user.id, 1000000);
+    // Grant first chips atomically (only for first 100 users, one claim per IP)
+    const updatedUser = await this.usersRepository.giveFirstChipsAtomic(user.id, FIRST_100_USERS_BONUS, ipAddress);
     const firstChipsReceived = updatedUser !== null;
     if (firstChipsReceived) {
-      await this.logWelcomeBonus(user.id, 1000000);
+      await this.logWelcomeBonus(user.id, FIRST_100_USERS_BONUS);
     }
 
     // Separate, uncapped bonus for signing up through a valid referral code — on top of,
@@ -443,24 +447,25 @@ export class UsersService {
     return userWithoutPassword;
   }
 
-  async giveFirstChips(userId: string): Promise<Partial<User>> {
+  async giveFirstChips(userId: string, ipAddress: string | null = null): Promise<Partial<User>> {
     const user = await this.usersRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const FIRST_CHIPS_AMOUNT = 1000000;
     const updatedUser = await this.usersRepository.giveFirstChipsAtomic(
       userId,
-      FIRST_CHIPS_AMOUNT,
+      FIRST_100_USERS_BONUS,
+      ipAddress,
     );
 
     if (!updatedUser) {
       // If the user exists but no row was updated, they already received first chips
+      // (or this IP already claimed it on a different account, or the 100 slots are full)
       throw new BadRequestException('User already received first chips');
     }
 
-    await this.logWelcomeBonus(userId, FIRST_CHIPS_AMOUNT);
+    await this.logWelcomeBonus(userId, FIRST_100_USERS_BONUS);
 
     const { password, ...userWithoutPassword } = updatedUser;
     return userWithoutPassword;

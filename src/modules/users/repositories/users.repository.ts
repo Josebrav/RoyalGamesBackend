@@ -142,16 +142,29 @@ export class UsersRepository {
    * Atomically grants first chips only if:
    * 1. The user hasn't received them yet
    * 2. Less than 100 users have received first chips
-   * Returns the updated user or null if the row wasn't updated.
+   * 3. That IP hasn't already claimed this bonus on a different account (see
+   *    first_chips_ip_claims — UNIQUE on ipAddress makes this the actual race-safe guard, the
+   *    slot-count check above just gates whether the claim insert is even attempted)
+   * A null ipAddress (should basically never happen - every real request has a socket
+   * remoteAddress) fails closed: no claim row, no chips, rather than let an untraceable request
+   * bypass the per-IP limit. Returns the updated user or null if the row wasn't updated.
    */
-  async giveFirstChipsAtomic(userId: string, amount: number): Promise<User | null> {
+  async giveFirstChipsAtomic(userId: string, amount: number, ipAddress: string | null): Promise<User | null> {
     const result = await this.repository.query(
-      `UPDATE users SET chips = chips + $1, "firstChips" = true 
-       WHERE id = $2 
-       AND ("firstChips" = false OR "firstChips" IS NULL) 
-       AND (SELECT COUNT(*) FROM users WHERE "firstChips" = true) < 100 
+      `WITH claim AS (
+         INSERT INTO first_chips_ip_claims ("ipAddress", "userId")
+         SELECT $3::varchar, $2
+         WHERE $3::varchar IS NOT NULL
+           AND (SELECT COUNT(*) FROM users WHERE "firstChips" = true) < 100
+         ON CONFLICT ("ipAddress") DO NOTHING
+         RETURNING 1
+       )
+       UPDATE users SET chips = chips + $1, "firstChips" = true
+       WHERE id = $2
+       AND ("firstChips" = false OR "firstChips" IS NULL)
+       AND EXISTS (SELECT 1 FROM claim)
        RETURNING *`,
-      [amount, userId],
+      [amount, userId, ipAddress],
     );
     
     let row: any = null;

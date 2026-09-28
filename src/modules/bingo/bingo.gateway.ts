@@ -5,6 +5,7 @@ import type WebSocket from 'ws';
 import { BingoService } from './bingo.service';
 import { BingoConnectionRegistry } from './ws/bingo-connection.registry';
 import { isOriginAllowed } from '../../config/cors-origins';
+import { extractClientIp } from '../../common/utils/ip.util';
 import {
   AddFriendMessage,
   BuyCardsMessage,
@@ -65,7 +66,7 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      this.registry.register(client, roomId, playerId, this.extractClientIp(request));
+      this.registry.register(client, roomId, playerId, extractClientIp(request));
       client.on('message', (raw: WebSocket.RawData) => this.handleMessage(client, raw));
       client.on('error', (err) => this.logger.warn(`Socket error for player ${playerId}: ${err.message}`));
 
@@ -84,21 +85,6 @@ export class BingoGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.warn(`Rejected connection: ${(error as Error).message}`);
       client.close(4004, 'Unable to join room');
     }
-  }
-
-  /** Render (and most PaaS hosts) sit in front of this app as a reverse proxy, so the raw TCP
-   *  connection's remoteAddress is the proxy's own IP, not the player's - the real client IP shows
-   *  up in X-Forwarded-For instead, closest-to-client entry first. Falls back to remoteAddress for
-   *  local/direct connections (ej. running the backend locally). */
-  private extractClientIp(request: IncomingMessage): string | null {
-    const forwarded = request.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length > 0) {
-      return forwarded.split(',')[0].trim();
-    }
-    if (Array.isArray(forwarded) && forwarded.length > 0) {
-      return forwarded[0].trim();
-    }
-    return request.socket?.remoteAddress ?? null;
   }
 
   handleDisconnect(client: WebSocket): void {

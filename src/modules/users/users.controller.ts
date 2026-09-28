@@ -16,6 +16,7 @@ import {
   ForbiddenException,
   UploadedFiles,
   Res,
+  Req,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -28,7 +29,8 @@ import {
 } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { extractClientIp } from '../../common/utils/ip.util';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users.service';
 import { UpdateAvatarDto } from './dtos/update-avatar.dto';
@@ -79,9 +81,8 @@ export class UsersController {
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
   @ApiResponse({ status: 409, description: 'Email or nick already exists' })
-  async createUser(@Body() createUserDto: CreateUserDto) {
-    console.log(createUserDto);
-    return this.usersService.createUser(createUserDto);
+  async createUser(@Body() createUserDto: CreateUserDto, @Req() req: Request) {
+    return this.usersService.createUser(createUserDto, extractClientIp(req));
   }
 
   @Get('getUsers')
@@ -308,15 +309,31 @@ export class UsersController {
     return this.usersService.adminSetDescription(userId, dto.description);
   }
 
+  // Antes sin ningún guard: cualquiera que supiera (o probara) un UUID de usuario podía llamar
+  // esto para ese OTRO usuario, las veces que quisiera hasta que se completaran los 100 cupos —
+  // el único freno real era el chequeo atómico de abajo, no algo a nivel de acceso. Ahora requiere
+  // sesión y solo deja reclamar el propio bono (coincide con el único uso real: App.jsx llama esto
+  // con el id del usuario logueado).
   @Put('firstchips/:userId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Give first chips to user' })
+  @ApiOperation({ summary: 'Give first chips to the currently logged-in user (self only)' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiResponse({ status: 200, description: 'First chips given' })
   @ApiResponse({ status: 400, description: 'User already received first chips' })
+  @ApiResponse({ status: 403, description: 'Cannot claim first chips for another user' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async giveFirstChips(@Param('userId', new ParseUUIDPipe()) userId: string) {
-    return this.usersService.giveFirstChips(userId);
+  async giveFirstChips(
+    @Param('userId', new ParseUUIDPipe()) userId: string,
+    @CurrentUser() currentUser: any,
+    @Req() req: Request,
+  ) {
+    if (currentUser.id !== userId) {
+      throw new ForbiddenException('Cannot claim first chips for another user');
+    }
+    return this.usersService.giveFirstChips(userId, extractClientIp(req));
   }
 
   @Put('user/:userId/avatar')
