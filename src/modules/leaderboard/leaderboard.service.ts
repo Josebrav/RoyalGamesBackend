@@ -51,6 +51,40 @@ export class LeaderboardService {
   }
 
   /**
+   * Top players by chips won in a rolling window (last 7 or 30 days), for the lobby's
+   * ranking panel (weekly/monthly tabs). Rolling window, not calendar week/month, to keep
+   * the query simple — "last 7 days" rather than "this ISO week".
+   *
+   * `chips` comes back from Postgres as a string for SUM(...)::bigint (pg doesn't parse
+   * int8 to a JS number by default), so it's explicitly converted here — otherwise it'd
+   * reach clients as a quoted JSON string instead of a number.
+   */
+  async getTopWinnersByPeriod(period: 'weekly' | 'monthly', limit = 10) {
+    const since = new Date();
+    since.setDate(since.getDate() - (period === 'weekly' ? 7 : 30));
+
+    const rows = await this.chipsAwardRepository.query(
+      `
+      SELECT u.id AS "userId", u.nick, SUM(ca.amount)::bigint AS "chips"
+      FROM chips_awards ca
+      JOIN users u ON u.id = ca."userId"
+      WHERE ca.source = 'game' AND ca."createdAt" >= $2
+      GROUP BY u.id, u.nick
+      ORDER BY SUM(ca.amount) DESC
+      LIMIT $1;
+      `,
+      [limit, since],
+    );
+
+    return rows.map((row: any, index: number) => ({
+      userId: row.userId,
+      nick: row.nick,
+      chips: Number(row.chips),
+      position: index + 1,
+    }));
+  }
+
+  /**
    * Individual recent wins (not aggregated per player) for the public "live winners" ticker
    * on the guest landing page. `game` is the slug from gamesCatalog.js — the frontend resolves
    * it to a display name.
