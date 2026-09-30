@@ -14,6 +14,17 @@ export class MakeBingoBotPhraseLogGlobal1791200000000 implements MigrationInterf
     await queryRunner.query(
       `ALTER TABLE "bingo_bot_phrase_log" DROP CONSTRAINT IF EXISTS "UQ_bingo_bot_phrase_log"`,
     );
+    // Bajo la restricción vieja (por bot), distintos bots ya habían usado la misma frase el mismo
+    // día muchas veces — eso es justo lo que esta migración vino a evitar, pero significa que ya
+    // hay filas duplicadas para (phraseKey, usedOnDate) que romperían el ADD CONSTRAINT de abajo.
+    // Nos quedamos con una fila por combinación (la más vieja) y borramos el resto antes de agregar
+    // la restricción global.
+    await queryRunner.query(`
+      DELETE FROM "bingo_bot_phrase_log" a USING "bingo_bot_phrase_log" b
+      WHERE a."phraseKey" = b."phraseKey"
+        AND a."usedOnDate" = b."usedOnDate"
+        AND a."id" > b."id"
+    `);
     await queryRunner.query(`
       DO $$ BEGIN
         ALTER TABLE "bingo_bot_phrase_log"
