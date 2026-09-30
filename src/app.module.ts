@@ -25,6 +25,8 @@ import { NewsModule } from './modules/news/news.module';
 import { BannerSlidesModule } from './modules/banner-slides/banner-slides.module';
 import { TrophiesModule } from './modules/trophies/trophies.module';
 import { SantaWildsModule } from './modules/santawilds/santawilds.module';
+import { DailySpinModule } from './modules/daily-spin/daily-spin.module';
+import { DailyBonusModule } from './modules/daily-bonus/daily-bonus.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -73,6 +75,8 @@ import { AppService } from './app.service';
     BannerSlidesModule,
     TrophiesModule,
     SantaWildsModule,
+    DailySpinModule,
+    DailyBonusModule,
   ],
   controllers: [AppController],
   providers: [

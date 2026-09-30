@@ -1,7 +1,7 @@
 import { Entity, Column, CreateDateColumn, ManyToOne, JoinColumn, PrimaryGeneratedColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
-export type ChipsAwardSource = 'admin' | 'game' | 'welcome' | 'gift' | 'prize' | 'referral';
+export type ChipsAwardSource = 'admin' | 'game' | 'welcome' | 'gift' | 'prize' | 'referral' | 'daily_spin' | 'daily_bonus';
 
 @Entity('chips_awards')
 export class ChipsAward {

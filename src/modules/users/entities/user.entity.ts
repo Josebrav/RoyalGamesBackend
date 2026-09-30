@@ -97,6 +97,21 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   lastSeen: Date | null;
 
+  // Ultima vez que el usuario reclamo el giro de la ruleta diaria (Unity, ver DailySpinModule) —
+  // se compara contra "hoy" en UTC para decidir si puede volver a girar.
+  @Column({ type: 'timestamp', nullable: true })
+  lastSpinAt: Date | null;
+
+  // Racha del Bono Diario de 7 días (ver DailyBonusModule): dailyBonusStreak es el ÚLTIMO día ya
+  // reclamado (0 = nunca), dailyBonusLastClaimAt se compara contra "hoy"/"ayer" en UTC para saber
+  // si hoy corresponde seguir la racha, repetir el mismo día (ya reclamado hoy) o reiniciarla a 1
+  // (se saltó un día).
+  @Column({ type: 'int', default: 0 })
+  dailyBonusStreak: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  dailyBonusLastClaimAt: Date | null;
+
   @Column({ type: 'varchar', length: 120, nullable: true })
   currentActivity: string | null;
 
