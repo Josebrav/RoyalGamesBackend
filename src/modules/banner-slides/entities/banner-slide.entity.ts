@@ -14,6 +14,11 @@ export class BannerSlide {
   @Column({ type: 'varchar' })
   imagePublicId: string;
 
+  // A dónde navega el usuario al tocar el banner — una ruta interna (ej. "/ayuda") o una URL
+  // externa completa. Null = el banner no es clickeable.
+  @Column({ type: 'varchar', nullable: true })
+  linkTo: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   createdBy: string | null;
 

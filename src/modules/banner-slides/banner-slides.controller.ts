@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, UseGuards, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiConsumes } from '@nestjs/swagger';
@@ -27,8 +27,12 @@ export class BannerSlidesController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Add a banner slide (Admin/Mod)' })
   @UseInterceptors(FileInterceptor('image', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
-  async create(@UploadedFile() image: Express.Multer.File, @CurrentUser() user: { id: string }) {
-    return this.bannerSlidesService.create(image, user.id);
+  async create(
+    @UploadedFile() image: Express.Multer.File,
+    @Body('linkTo') linkTo: string | undefined,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.bannerSlidesService.create(image, user.id, linkTo || null);
   }
 
   @Delete(':id')

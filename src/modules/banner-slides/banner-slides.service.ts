@@ -18,7 +18,7 @@ export class BannerSlidesService {
     return this.bannerSlideRepository.find({ order: { createdAt: 'ASC' } });
   }
 
-  async create(file: Express.Multer.File, createdBy: string): Promise<BannerSlide> {
+  async create(file: Express.Multer.File, createdBy: string, linkTo: string | null = null): Promise<BannerSlide> {
     if (!file) {
       throw new BadRequestException('No se recibió ningún archivo');
     }
@@ -31,6 +31,7 @@ export class BannerSlidesService {
     const slide = this.bannerSlideRepository.create({
       imageUrl: url,
       imagePublicId: publicId,
+      linkTo: linkTo?.trim() || null,
       createdBy,
     });
     return this.bannerSlideRepository.save(slide);
