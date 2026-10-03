@@ -9,6 +9,11 @@ export const ALLOWED_ORIGINS = [
   'https://royaljoker1.s3.us-east-2.amazonaws.com',
   'https://royalgames.lat',
   'https://www.royalgames.lat',
+  // royaljuegos.com (DonWeb) pasa a ser el dominio principal en español, reemplazando a
+  // royalgames.lat en ese rol — royalgames.lat se reasigna al sitio en portugués. Se dejan AMBOS
+  // (royalgames.lat y royaljuegos.com) permitidos durante la transición de dominios.
+  'https://royaljuegos.com',
+  'https://www.royaljuegos.com',
   // Sitios en inglés/portugués (repos separados RoyalFrontNew-EN/-PT, mismo backend). Nombres
   // reales que asignó Vercel (distintos de lo que se había supuesto al principio).
   'https://royal-front-new-en.vercel.app',
