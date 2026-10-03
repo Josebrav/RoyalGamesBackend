@@ -37,6 +37,15 @@ export class BannerSlidesService {
     return this.bannerSlideRepository.save(slide);
   }
 
+  async updateLink(id: string, linkTo: string | null): Promise<BannerSlide> {
+    const slide = await this.bannerSlideRepository.findOne({ where: { id } });
+    if (!slide) {
+      throw new NotFoundException('Slide not found');
+    }
+    slide.linkTo = linkTo?.trim() || null;
+    return this.bannerSlideRepository.save(slide);
+  }
+
   async remove(id: string): Promise<void> {
     const slide = await this.bannerSlideRepository.findOne({ where: { id } });
     if (!slide) {

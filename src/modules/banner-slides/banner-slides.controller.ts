@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, ParseUUIDPipe } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiConsumes } from '@nestjs/swagger';
@@ -33,6 +33,16 @@ export class BannerSlidesController {
     @CurrentUser() user: { id: string },
   ) {
     return this.bannerSlidesService.create(image, user.id, linkTo || null);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MOD)
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id', description: 'Banner slide UUID' })
+  @ApiOperation({ summary: 'Update a banner slide\'s destination link (Admin/Mod)' })
+  async updateLink(@Param('id', new ParseUUIDPipe()) id: string, @Body('linkTo') linkTo: string | undefined) {
+    return this.bannerSlidesService.updateLink(id, linkTo || null);
   }
 
   @Delete(':id')
