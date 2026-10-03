@@ -1,5 +1,5 @@
 /**
- * Snapshot of a fixed default avatar (image + Vestidor layer composition), baked into the
+ * Snapshot of a fixed default avatar (image + RoyalStore layer composition), baked into the
  * code at account-creation time. Intentionally NOT a live reference to any user's row —
  * if that user later changes their own avatar, new accounts already assigned this default
  * are unaffected, and future signups keep getting this exact snapshot.

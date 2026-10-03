@@ -13,8 +13,8 @@ import { MailingModule } from '../mailing/mailing.module';
     TypeOrmModule.forFeature([User, ChipsAward]),
     MailingModule,
     // AuthModule only exports AuthService (not JwtModule), so this module registers its own
-    // JwtService against the same JWT_SECRET — used to mint the short-lived Vestidor session
-    // token (see UsersController.issueVestidorSessionToken), same pattern as MinesModule.
+    // JwtService against the same JWT_SECRET — used to mint the short-lived RoyalStore session
+    // token (see UsersController.issueRoyalStoreSessionToken), same pattern as MinesModule.
     JwtModule.register({
       secret: process.env.JWT_SECRET,
     }),

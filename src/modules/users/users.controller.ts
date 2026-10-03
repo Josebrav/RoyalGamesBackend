@@ -48,7 +48,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
 
-const VESTIDOR_SESSION_TOKEN_TTL_SECONDS = 300;
+const ROYALSTORE_SESSION_TOKEN_TTL_SECONDS = 300;
 
 @ApiTags('Users')
 @Controller()
@@ -59,20 +59,20 @@ export class UsersController {
   ) {}
 
   // Igual patrón que games/mines/session-token: la SPA (con sesión real, JwtAuthGuard) pide
-  // este token corto antes de abrir el iframe del editor del Vestidor. Preparado pero TODAVÍA NO
-  // exigido en PUT user/:userId/avatar — esa app vive aparte en S3 y hay que actualizarla
+  // este token corto antes de abrir el iframe del editor del RoyalStore. Preparado pero TODAVÍA
+  // NO exigido en PUT user/:userId/avatar — esa app vive aparte en S3 y hay que actualizarla
   // primero para que pida y mande este token antes de activar el guard ahí (si no, se rompe
   // el guardado de avatar en producción). Ver memoria/plan de la Tarea 10.
-  @Post('vestidor/session-token')
+  @Post('royalstore/session-token')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Mint a short-lived token the Vestidor avatar editor uses to identify the player' })
-  async issueVestidorSessionToken(@CurrentUser() user: any) {
+  @ApiOperation({ summary: 'Mint a short-lived token the RoyalStore avatar editor uses to identify the player' })
+  async issueRoyalStoreSessionToken(@CurrentUser() user: any) {
     const token = await this.jwtService.signAsync(
-      { sub: user.id, scope: 'vestidor' },
-      { expiresIn: `${VESTIDOR_SESSION_TOKEN_TTL_SECONDS}s` },
+      { sub: user.id, scope: 'royalstore' },
+      { expiresIn: `${ROYALSTORE_SESSION_TOKEN_TTL_SECONDS}s` },
     );
-    return { token, expiresIn: VESTIDOR_SESSION_TOKEN_TTL_SECONDS };
+    return { token, expiresIn: ROYALSTORE_SESSION_TOKEN_TTL_SECONDS };
   }
 
   @Post('signup')

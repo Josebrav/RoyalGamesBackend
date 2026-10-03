@@ -92,7 +92,7 @@ export class UsersService {
       }
     }
 
-    // Avatar por defecto del Vestidor horneado al crear la cuenta: uno para hombre (sexo 'H') y
+    // Avatar por defecto del RoyalStore horneado al crear la cuenta: uno para hombre (sexo 'H') y
     // otro para mujer (sexo 'M'). El de mujer solo se aplica si ya existe el snapshot
     // (DEFAULT_FEMALE_AVATAR_READY); mientras no exista, las mujeres se crean sin avatar por
     // defecto, igual que antes.
