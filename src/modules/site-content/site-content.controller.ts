@@ -52,4 +52,18 @@ export class SiteContentController {
   ) {
     return this.siteContentService.setImage(key, image, user.id);
   }
+
+  @Patch(':key/link')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MOD)
+  @ApiBearerAuth()
+  @ApiParam({ name: 'key', description: 'Content block key, e.g. home.dashboard.banner2' })
+  @ApiOperation({ summary: 'Set the destination link for an image content block (Admin/Mod)' })
+  async setLink(
+    @Param('key') key: string,
+    @Body('linkTo') linkTo: string | undefined,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.siteContentService.setLink(key, linkTo || null, user.id);
+  }
 }

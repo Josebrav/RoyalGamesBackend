@@ -14,14 +14,14 @@ export class SiteContentService {
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
-  async getAll(): Promise<Record<string, { type: string; text?: string; imageUrl?: string }>> {
+  async getAll(): Promise<Record<string, { type: string; text?: string; imageUrl?: string; linkTo?: string | null }>> {
     const blocks = await this.siteContentRepository.find();
-    const result: Record<string, { type: string; text?: string; imageUrl?: string }> = {};
+    const result: Record<string, { type: string; text?: string; imageUrl?: string; linkTo?: string | null }> = {};
     for (const block of blocks) {
       if (block.type === 'text') {
         result[block.key] = { type: 'text', text: block.textValue ?? '' };
       } else {
-        result[block.key] = { type: 'image', imageUrl: block.imageUrl ?? '' };
+        result[block.key] = { type: 'image', imageUrl: block.imageUrl ?? '', linkTo: block.linkTo ?? null };
       }
     }
     return result;
@@ -38,7 +38,7 @@ export class SiteContentService {
     await this.siteContentRepository.save(block);
   }
 
-  async setImage(key: string, file: Express.Multer.File, updatedBy: string): Promise<{ imageUrl: string }> {
+  async setImage(key: string, file: Express.Multer.File, updatedBy: string): Promise<{ imageUrl: string; linkTo: string | null }> {
     if (!file) {
       throw new BadRequestException('No se recibió ningún archivo');
     }
@@ -64,6 +64,17 @@ export class SiteContentService {
       await this.cloudinaryService.deleteImage(previousPublicId);
     }
 
-    return { imageUrl: url };
+    return { imageUrl: url, linkTo: block.linkTo };
+  }
+
+  async setLink(key: string, linkTo: string | null, updatedBy: string): Promise<{ linkTo: string | null }> {
+    let block = await this.siteContentRepository.findOne({ where: { key } });
+    if (!block) {
+      block = this.siteContentRepository.create({ key, type: 'image' });
+    }
+    block.linkTo = linkTo?.trim() || null;
+    block.updatedBy = updatedBy;
+    await this.siteContentRepository.save(block);
+    return { linkTo: block.linkTo };
   }
 }

@@ -22,6 +22,11 @@ export class SiteContentBlock {
   @Column({ type: 'varchar', nullable: true })
   imagePublicId: string | null;
 
+  // A dónde navega al tocar la imagen (solo aplica a type='image') — ruta interna (ej. "/ayuda")
+  // o URL externa completa. Null = no clickeable.
+  @Column({ type: 'varchar', nullable: true })
+  linkTo: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   updatedBy: string | null;
 
