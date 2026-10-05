@@ -32,6 +32,13 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
+/** Solo se puede comprar para uno mismo: el userId del body tiene que ser el de la sesión. */
+function assertSameUser(currentUser: any, userId: string): void {
+  if (currentUser?.id !== userId) {
+    throw new ForbiddenException('Cannot create or capture payments for another user');
+  }
+}
+
 @ApiTags('Payments')
 @Controller()
 export class PaymentsController {
@@ -41,6 +48,7 @@ export class PaymentsController {
   @Post('mepago/create-order/:country')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Create MercadoPago order using a country-specific seller account',
     description:
@@ -55,7 +63,9 @@ export class PaymentsController {
   async createMercadoPagoOrderByCountry(
     @Param('country') country: string,
     @Body() dto: CreateMercadoPagoOrderByCountryDto,
+    @CurrentUser() currentUser: any,
   ) {
+    assertSameUser(currentUser, dto.userId);
     return this.paymentsService.createMercadoPagoOrderForCountry(country, dto);
   }
 
@@ -118,7 +128,11 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Create PayPal order' })
   @ApiResponse({ status: 201, description: 'Order created successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async createPayPalOrder(@Body() createPayPalOrderDto: CreatePayPalOrderDto) {
+  async createPayPalOrder(
+    @Body() createPayPalOrderDto: CreatePayPalOrderDto,
+    @CurrentUser() currentUser: any,
+  ) {
+    assertSameUser(currentUser, createPayPalOrderDto.userId);
     return this.paymentsService.createPayPalOrder(createPayPalOrderDto);
   }
 
@@ -129,7 +143,11 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Capture PayPal order' })
   @ApiResponse({ status: 200, description: 'Order captured successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async capturePayPalOrder(@Body() capturePayPalOrderDto: CapturePayPalOrderDto) {
+  async capturePayPalOrder(
+    @Body() capturePayPalOrderDto: CapturePayPalOrderDto,
+    @CurrentUser() currentUser: any,
+  ) {
+    assertSameUser(currentUser, capturePayPalOrderDto.userId);
     return this.paymentsService.capturePayPalOrder(capturePayPalOrderDto);
   }
 
