@@ -377,9 +377,20 @@ export class PaymentsService {
   }
 
   // ============= PAYPAL =============
-  /** Cliente de PayPal (sandbox) compartido por creación y captura de órdenes. */
+  /**
+   * Cliente de PayPal compartido por creación y captura de órdenes. PAYPAL_MODE=live usa
+   * la API real (credenciales live); cualquier otro valor, o sin definir, usa sandbox.
+   * El client id del front (VITE_PAYPAL_CLIENT_ID) tiene que ser del mismo entorno.
+   */
   private getPayPalClient(): InstanceType<typeof paypalCheckoutServerSdk.core.PayPalHttpClient> {
-    const environment = new paypalCheckoutServerSdk.core.SandboxEnvironment(
+    const isLive = (process.env.PAYPAL_MODE || '').trim().toLowerCase() === 'live';
+    if (!isLive && process.env.NODE_ENV === 'production') {
+      this.logger.warn('PayPal en modo sandbox con NODE_ENV=production: definí PAYPAL_MODE=live');
+    }
+    const Environment = isLive
+      ? paypalCheckoutServerSdk.core.LiveEnvironment
+      : paypalCheckoutServerSdk.core.SandboxEnvironment;
+    const environment = new Environment(
       process.env.PAYPAL_CLIENT_ID,
       process.env.PAYPAL_CLIENT_SECRET,
     );
