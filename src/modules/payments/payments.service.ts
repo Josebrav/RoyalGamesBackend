@@ -32,6 +32,17 @@ const MERCADOPAGO_COUNTRY_CONFIG: Record<
   mx: { currency: 'MXN', envVar: 'MERCADOPAGO_ACCESS_TOKEN_MX', usdRate: 20 },
 };
 
+/** true si `amount` (formato PayPal) es exactamente el precio en USD del paquete. */
+function isExpectedUsdAmount(
+  amount: { currency_code?: string; value?: string } | undefined,
+  chipPackage: ChipPackage,
+): boolean {
+  return (
+    amount?.currency_code === 'USD' &&
+    Number(amount?.value) === Number(chipPackage.priceUsd.toFixed(2))
+  );
+}
+
 /** Busca el paquete o tira 400: el cliente nunca decide fichas ni precio. */
 function getChipPackageOrThrow(packageId: number): ChipPackage {
   const chipPackage = findChipPackage(packageId);
@@ -354,7 +365,8 @@ export class PaymentsService {
               value: chipPackage.priceUsd.toFixed(2),
             },
             description: `Royal Games - ${chipPackage.chips} Chips`,
-            custom_id: createPayPalOrderDto.userId,
+            // "<userId>:<packageId>": al capturar se lee de acá qué paquete se pagó.
+            custom_id: `${createPayPalOrderDto.userId}:${chipPackage.id}`,
           },
         ],
         application_context: {
@@ -374,8 +386,45 @@ export class PaymentsService {
     }
   }
 
+  /**
+   * Antes de capturar, lee la orden en PayPal y devuelve el paquete que se creó con
+   * ella. Rechaza (sin cobrar) si la orden es de otro usuario, de otro paquete o si
+   * el monto no es el precio del catálogo.
+   */
+  private async getVerifiedPayPalOrderPackage(
+    client: InstanceType<typeof paypalCheckoutServerSdk.core.PayPalHttpClient>,
+    dto: CapturePayPalOrderDto,
+  ): Promise<ChipPackage> {
+    let order: any;
+    try {
+      const response = await client.execute(
+        new paypalCheckoutServerSdk.orders.OrdersGetRequest(dto.orderId),
+      );
+      order = response.result;
+    } catch (error) {
+      this.logger.error('PayPal Order Lookup Error:', error);
+      throw new BadRequestException('Failed to capture PayPal order');
+    }
+
+    const unit = order?.purchase_units?.[0];
+    const [orderUserId, orderPackageId] = String(unit?.custom_id ?? '').split(':');
+    const chipPackage = findChipPackage(Number(orderPackageId));
+
+    if (
+      !chipPackage ||
+      orderUserId !== dto.userId ||
+      chipPackage.id !== dto.packageId ||
+      !isExpectedUsdAmount(unit?.amount, chipPackage)
+    ) {
+      this.logger.warn(
+        `PayPal order ${dto.orderId} rechazada: no coincide con usuario ${dto.userId} / paquete ${dto.packageId}`,
+      );
+      throw new BadRequestException('La orden de PayPal no coincide con el paquete');
+    }
+    return chipPackage;
+  }
+
   async capturePayPalOrder(capturePayPalOrderDto: CapturePayPalOrderDto): Promise<any> {
-    const chipPackage = getChipPackageOrThrow(capturePayPalOrderDto.packageId);
     const user = await this.usersRepository.findOne({
       where: { id: capturePayPalOrderDto.userId },
     });
@@ -384,8 +433,10 @@ export class PaymentsService {
       throw new NotFoundException('User not found');
     }
 
+    const client = this.getPayPalClient();
+    const chipPackage = await this.getVerifiedPayPalOrderPackage(client, capturePayPalOrderDto);
+
     try {
-      const client = this.getPayPalClient();
       const request = new paypalCheckoutServerSdk.orders.OrdersCaptureRequest(
         capturePayPalOrderDto.orderId,
       );
@@ -394,6 +445,16 @@ export class PaymentsService {
 
       if (response.result.status === 'COMPLETED') {
         const paymentId = response.result.id;
+
+        // Red de seguridad: lo efectivamente capturado tiene que ser el precio del paquete.
+        const capture = response.result.purchase_units?.[0]?.payments?.captures?.[0];
+        if (!isExpectedUsdAmount(capture?.amount, chipPackage)) {
+          this.logger.error(
+            `PayPal order ${paymentId}: monto capturado ${capture?.amount?.value} ${capture?.amount?.currency_code} ` +
+              `no coincide con el paquete ${chipPackage.id}; no se acreditan fichas`,
+          );
+          throw new BadRequestException('El monto cobrado no coincide con el paquete');
+        }
 
         // Usar transacción para actualizar usuario y crear pago
         return await this.dataSource.manager.transaction(async (manager) => {
