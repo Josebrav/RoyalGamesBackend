@@ -9,6 +9,7 @@ import {
   HttpStatus,
   ParseUUIDPipe,
   Res,
+  Headers,
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
@@ -74,10 +75,20 @@ export class PaymentsController {
   @ApiOperation({ summary: 'MercadoPago webhook' })
   async handleMercadoPagoWebhook(
     @Body() data: any,
-    @Query('id') id?: string,
-    @Query('topic') topic?: string,
+    @Query() query: Record<string, any>,
+    @Headers('x-signature') signature?: string,
+    @Headers('x-request-id') requestId?: string,
   ) {
-    await this.paymentsService.handleMercadoPagoWebhook(data, { id, topic });
+    await this.paymentsService.handleMercadoPagoWebhook(
+      data,
+      { id: query?.id, topic: query?.topic },
+      {
+        signature,
+        requestId,
+        // Mercado Pago firma el `data.id` que manda en la query string.
+        dataId: query?.['data.id'] ?? query?.data?.id ?? data?.data?.id,
+      },
+    );
     return { status: 'received' };
   }
 

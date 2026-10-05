@@ -1,4 +1,10 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as paypalCheckoutServerSdk from '@paypal/checkout-server-sdk';
 import MercadoPagoConfig, { Payment } from 'mercadopago';
 import { Repository, DataSource } from 'typeorm';
@@ -15,6 +21,7 @@ import { MercadoPagoRepository } from './repositories/mercadopago.repository';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { UsersService } from '../users/users.service';
 import { ChipPackage, findChipPackage } from './chip-packages';
+import { isValidMercadoPagoSignature } from './mercadopago-signature';
 
 export type MercadoPagoCountry = 'ar' | 'co' | 'mx';
 
@@ -150,14 +157,52 @@ export class PaymentsService {
     });
   }
 
-  async handleMercadoPagoWebhook(data: any, queryParams?: any): Promise<void> {
+  /**
+   * Claves secretas de webhook configuradas (genérica + una por país): cada cuenta
+   * vendedora de Mercado Pago firma con la suya.
+   */
+  private getConfiguredMercadoPagoWebhookSecrets(): string[] {
+    const candidates = ['', '_AR', '_CO', '_MX'].map(
+      (suffix) => process.env[`MERCADOPAGO_WEBHOOK_SECRET${suffix}`],
+    );
+    return candidates.filter(
+      (secret): secret is string => !!secret && !secret.startsWith('REEMPLAZAR_'),
+    );
+  }
+
+  async handleMercadoPagoWebhook(
+    data: any,
+    queryParams?: any,
+    signatureInfo?: { signature?: string; requestId?: string; dataId?: string },
+  ): Promise<void> {
     try {
       // Manejo de payment webhook estilo IPN legacy (query params: ?id=&topic=payment).
       // MercadoPago sigue mandando este formato en paralelo al de webhooks v2 (JSON body).
+      // El IPN legacy no viene firmado; es seguro procesarlo porque el pago siempre se
+      // vuelve a consultar a la API de Mercado Pago con nuestros tokens antes de acreditar.
       if (queryParams?.topic === 'payment' && queryParams?.id) {
         this.logger.debug(`Payment IPN webhook received: ${queryParams.id}`);
         await this.processMercadoPagoPayment(queryParams.id);
         return;
+      }
+
+      // Webhooks v2: si hay claves secretas configuradas, la firma es obligatoria.
+      const secrets = this.getConfiguredMercadoPagoWebhookSecrets();
+      if (secrets.length > 0) {
+        const valid = isValidMercadoPagoSignature({
+          signatureHeader: signatureInfo?.signature,
+          requestId: signatureInfo?.requestId,
+          dataId: signatureInfo?.dataId,
+          secrets,
+        });
+        if (!valid) {
+          this.logger.warn('MercadoPago webhook con firma inválida o ausente; ignorado');
+          throw new UnauthorizedException('Invalid MercadoPago signature');
+        }
+      } else {
+        this.logger.warn(
+          'MERCADOPAGO_WEBHOOK_SECRET* no configurado: el webhook se procesa sin validar la firma',
+        );
       }
 
       // Manejo de payment webhook (JSON body, formato webhooks v2)
