@@ -536,51 +536,8 @@ export class PaymentsService {
           throw new BadRequestException('El monto cobrado no coincide con el paquete');
         }
 
-        // Usar transacción para actualizar usuario y crear pago
-        return await this.dataSource.manager.transaction(async (manager) => {
-          // Idempotencia: PayPal puede devolver COMPLETED más de una vez para la misma
-          // orden (doble click, reintento de red, StrictMode en dev) sin volver a cobrarle
-          // al comprador — si ya acreditamos este orderId antes, no sumar chips de nuevo.
-          const existingPayment = await manager.findOne(Pay, {
-            where: { mercadoPagoPaymentId: paymentId },
-          });
-
-          if (existingPayment) {
-            this.logger.debug(`PayPal order ${paymentId} already captured, skipping`);
-            return response.result;
-          }
-
-          const transactionUser = await manager.findOne(User, {
-            where: { id: capturePayPalOrderDto.userId },
-          });
-
-          if (transactionUser) {
-            transactionUser.chips = Number(transactionUser.chips || 0) + chipPackage.chips;
-            await manager.save(User, transactionUser);
-            await this.usersService.registerDeposit(
-              capturePayPalOrderDto.userId,
-              chipPackage.chips,
-              manager,
-            );
-          }
-
-          await manager.save(
-            Pay,
-            manager.create(Pay, {
-              userId: capturePayPalOrderDto.userId,
-              chips: chipPackage.chips,
-              price: chipPackage.priceUsd.toFixed(2),
-              currency: 'USD', // PayPal siempre cobra en USD en este flujo (ver createPayPalOrder)
-              paymentPlatform: 'paypal',
-              mercadoPagoPaymentId: paymentId,
-              status: PaymentStatus.APPROVED,
-              date: new Date().toISOString(),
-            }),
-          );
-
-          this.logger.log(`PayPal payment captured for user ${capturePayPalOrderDto.userId}: +${chipPackage.chips} chips`);
-          return response.result;
-        });
+        await this.creditPayPalOrder(paymentId, capturePayPalOrderDto.userId, chipPackage);
+        return response.result;
       }
 
       return response.result;
@@ -588,6 +545,88 @@ export class PaymentsService {
       this.logger.error('PayPal Capture Error:', error);
       throw new BadRequestException('Failed to capture PayPal order');
     }
+  }
+
+  /**
+   * Acredita una orden de PayPal ya cobrada. Idempotente: si el orderId ya está en `pays`
+   * no hace nada, así que la captura desde el front y el webhook pueden llegar ambos (en
+   * cualquier orden) sin acreditar dos veces. El lock sobre el usuario serializa los dos
+   * caminos para que no pasen el chequeo de duplicado al mismo tiempo.
+   */
+  private async creditPayPalOrder(
+    orderId: string,
+    userId: string,
+    chipPackage: ChipPackage,
+  ): Promise<void> {
+    await this.dataSource.manager.transaction(async (manager) => {
+      const transactionUser = await manager.findOne(User, {
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      const existingPayment = await manager.findOne(Pay, {
+        where: { mercadoPagoPaymentId: orderId },
+      });
+      if (existingPayment) {
+        this.logger.debug(`PayPal order ${orderId} already credited, skipping`);
+        return;
+      }
+
+      if (transactionUser) {
+        transactionUser.chips = Number(transactionUser.chips || 0) + chipPackage.chips;
+        await manager.save(User, transactionUser);
+        await this.usersService.registerDeposit(userId, chipPackage.chips, manager);
+      }
+
+      await manager.save(
+        Pay,
+        manager.create(Pay, {
+          userId,
+          chips: chipPackage.chips,
+          price: chipPackage.priceUsd.toFixed(2),
+          currency: 'USD', // PayPal siempre cobra en USD en este flujo (ver createPayPalOrder)
+          paymentPlatform: 'paypal',
+          mercadoPagoPaymentId: orderId,
+          status: PaymentStatus.APPROVED,
+          date: new Date().toISOString(),
+        }),
+      );
+
+      this.logger.log(`PayPal payment credited for user ${userId}: +${chipPackage.chips} chips`);
+    });
+  }
+
+  /**
+   * Webhook de PayPal (evento PAYMENT.CAPTURE.COMPLETED). Respaldo de la captura del front:
+   * si el navegador se cierra o la respuesta se pierde después de cobrar, acredita igual.
+   * No confía en el cuerpo del evento: vuelve a leer la orden en la API de PayPal con
+   * nuestras credenciales y solo acredita si está COMPLETED por el precio del paquete.
+   */
+  async handlePayPalWebhook(event: any): Promise<void> {
+    if (event?.event_type !== 'PAYMENT.CAPTURE.COMPLETED') return;
+
+    const orderId: string | undefined = event?.resource?.supplementary_data?.related_ids?.order_id;
+    if (!orderId) {
+      this.logger.warn('PayPal webhook sin order_id; ignorado');
+      return;
+    }
+
+    const client = this.getPayPalClient();
+    const order = (
+      await client.execute(new paypalCheckoutServerSdk.orders.OrdersGetRequest(orderId))
+    ).result;
+    if (order?.status !== 'COMPLETED') return;
+
+    const unit = order.purchase_units?.[0];
+    const [userId, packageId] = String(unit?.custom_id ?? '').split(':');
+    const chipPackage = findChipPackage(Number(packageId));
+    const capture = unit?.payments?.captures?.find((c: any) => c.status === 'COMPLETED');
+    if (!userId || !chipPackage || !isExpectedUsdAmount(capture?.amount, chipPackage)) {
+      this.logger.warn(`PayPal webhook: orden ${orderId} no coincide con un paquete; no se acredita`);
+      return;
+    }
+
+    await this.creditPayPalOrder(order.id, userId, chipPackage);
   }
 
   // ============= GENERAL PAYMENT METHODS =============

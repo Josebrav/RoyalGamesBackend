@@ -162,6 +162,14 @@ export class PaymentsController {
     return this.paymentsService.capturePayPalOrder(capturePayPalOrderDto);
   }
 
+  @Post('paypal/webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'PayPal webhook (PAYMENT.CAPTURE.COMPLETED)' })
+  async handlePayPalWebhook(@Body() event: any) {
+    await this.paymentsService.handlePayPalWebhook(event);
+    return { status: 'received' };
+  }
+
   // ============= GENERAL =============
   // Global feed of every payment across every user — a platform-wide money summary, so this
   // stays admin-only. Mods needing to help ONE customer use getUserPayments below instead.
