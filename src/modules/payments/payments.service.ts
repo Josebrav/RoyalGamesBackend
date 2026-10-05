@@ -8,6 +8,7 @@ import {
 import * as paypalCheckoutServerSdk from '@paypal/checkout-server-sdk';
 import MercadoPagoConfig, { Payment } from 'mercadopago';
 import { Repository, DataSource } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
 import { Pay } from './entities/pay.entity';
@@ -88,7 +89,11 @@ export class PaymentsService {
     const user = await this.usersRepository.findOne({ where: { id: params.userId } });
     if (!user) throw new NotFoundException('User not found');
 
+    // El id del registro pendiente se genera antes para mandarlo en la metadata de la
+    // preferencia: así el webhook sabe exactamente qué compra cerrar.
+    const payId = randomUUID();
     const preference = await this.mercadoPagoRepository.createPreference({
+      payId,
       itemId: `${params.userId}-${Date.now()}`,
       title: `Royal Games - ${params.chips} Chips`,
       unitPrice: parseFloat(params.price),
@@ -101,6 +106,7 @@ export class PaymentsService {
 
     // Crear registro de pago PENDIENTE con preferenceId
     const pagoDb = this.payRepository.create({
+      id: payId,
       userId: params.userId,
       chips: params.chips,
       price: params.price,
@@ -305,22 +311,40 @@ export class PaymentsService {
           return;
         }
 
-        // Buscar pago PENDIENTE por userId + preferenceId para actualizar
-        const pendingPayment = await manager.findOne(Pay, {
-          where: {
-            userId,
-            status: PaymentStatus.PENDING,
-          },
-          order: { createdAt: 'DESC' }, // Obtener el más reciente
-        });
+        // Pago PENDIENTE de esta compra: por el pay_id que se mandó en la metadata de la
+        // preferencia. Las preferencias creadas antes de ese cambio no lo traen; para esas
+        // se usa el pendiente más reciente del usuario, como antes.
+        const payId: string | undefined = payment.metadata?.pay_id;
+        const pendingPayment = payId
+          ? await manager.findOne(Pay, {
+              where: { id: payId, userId, status: PaymentStatus.PENDING },
+            })
+          : await manager.findOne(Pay, {
+              where: { userId, status: PaymentStatus.PENDING },
+              order: { createdAt: 'DESC' },
+            });
 
         if (payment.status === 'approved') {
+          // Lo cobrado tiene que coincidir con lo que se guardó al crear la orden.
+          if (
+            pendingPayment &&
+            (Number(payment.transaction_amount) !== Number(pendingPayment.price) ||
+              (pendingPayment.currency && payment.currency_id !== pendingPayment.currency))
+          ) {
+            this.logger.error(
+              `Pago ${payment.id}: cobrado ${payment.transaction_amount} ${payment.currency_id}, ` +
+                `esperado ${pendingPayment.price} ${pendingPayment.currency}; no se acreditan fichas`,
+            );
+            return;
+          }
+
           // Actualizar usuario con chips. `chips` es una columna bigint: TypeORM la
           // devuelve como string, así que hay que castear antes de sumar (si no,
           // `(user.chips || 0) + chips` concatena strings en vez de sumar).
-          user.chips = Number(user.chips || 0) + chips;
+          const creditedChips = pendingPayment ? Number(pendingPayment.chips) : chips;
+          user.chips = Number(user.chips || 0) + creditedChips;
           await manager.save(User, user);
-          await this.usersService.registerDeposit(userId, chips, manager);
+          await this.usersService.registerDeposit(userId, creditedChips, manager);
 
           if (pendingPayment) {
             // Actualizar orden pendiente existente
@@ -332,7 +356,7 @@ export class PaymentsService {
             pendingPayment.currency = pendingPayment.currency || payment.currency_id || null;
             await manager.save(Pay, pendingPayment);
 
-            this.logger.log(`Payment approved for user ${userId}: +${chips} chips`);
+            this.logger.log(`Payment approved for user ${userId}: +${creditedChips} chips`);
           } else {
             // Si no hay pendiente, crear uno nuevo (por si llega webhook de payment sin crear orden primero)
             const newPayment = manager.create(Pay, {

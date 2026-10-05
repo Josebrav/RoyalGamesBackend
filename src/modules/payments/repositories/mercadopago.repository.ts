@@ -18,6 +18,8 @@ export interface MpPreferenceInput {
   userId: string;
   /** Chips a acreditar; se incluye en metadata para el webhook */
   chips?: number;
+  /** ID del registro `pays` pendiente; va en metadata para que el webhook lo encuentre */
+  payId?: string;
   /** URLs de retorno opcionales; si no se pasan se usan las del .env */
   successUrl?: string;
   failureUrl?: string;
@@ -126,8 +128,13 @@ export class MercadoPagoRepository {
             : {}),
           external_reference: input.userId,
           ...(notificationUrl ? { notification_url: notificationUrl } : {}),
-          ...(input.chips !== undefined
-            ? { metadata: { chips: input.chips } }
+          ...(input.chips !== undefined || input.payId
+            ? {
+                metadata: {
+                  ...(input.chips !== undefined ? { chips: input.chips } : {}),
+                  ...(input.payId ? { pay_id: input.payId } : {}),
+                },
+              }
             : {}),
         },
       });
