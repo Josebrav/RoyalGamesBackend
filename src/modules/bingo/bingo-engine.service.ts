@@ -122,6 +122,21 @@ export class BingoEngineService implements OnModuleInit {
   private async processWaitingGame(roomId: string, game: BingoGame, now: Date): Promise<void> {
     const purchaseStartedAt = game.persistedSnapshot?.purchaseStartedAt ?? null;
     const remaining = getPurchaseWindowRemaining(purchaseStartedAt, this.bingoService.purchaseWindowSeconds, now);
+
+    if (remaining === null) {
+      // purchaseStartedAt was never set - normally that happens the instant the previous game
+      // finishes (BingoEngineService.processRunningGame -> gateway.ensureTimerIfRoomOccupied) or
+      // the moment someone connects/buys into this one (BingoGateway.handleConnection /
+      // BingoService.purchaseCardTransaction). If whatever was supposed to trigger that never
+      // fired or threw partway through, nothing else in this tick loop ever retried it - the room
+      // would otherwise sit frozen forever (no countdown, can't buy) until a NEW connection
+      // happened to land here by chance. Safe to call unconditionally: ensurePurchaseWindowStarted
+      // already no-ops if it's already started or a running game still legitimately blocks it.
+      await this.bingoService.ensurePurchaseWindowStarted(game.id);
+      await this.gateway.broadcastRoomState(roomId);
+      return;
+    }
+
     if (remaining !== 0) {
       return;
     }
