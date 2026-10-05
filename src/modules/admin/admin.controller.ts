@@ -83,57 +83,50 @@ export class AdminController {
     return this.adminService.getModAudit(modId);
   }
 
-  // --- Bots de Bingo (economía de la casa, solo admin — ver plan "Bots de Bingo") ---
+  // --- Bots de Bingo (economía de la casa — antes solo admin, ahora también mod a pedido) ---
 
   @Get('bingo-bots')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'List all Bingo bots, with room name and live chip balance (Admin only)' })
+  @ApiOperation({ summary: 'List all Bingo bots, with room name and live chip balance (Admin/Mod)' })
   async listBingoBots() {
     return this.bingoBotService.listBots();
   }
 
   @Get('bingo-bots/rooms')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Bingo rooms available to assign a bot to (Admin only)' })
+  @ApiOperation({ summary: 'Bingo rooms available to assign a bot to (Admin/Mod)' })
   async listBingoBotRooms() {
     return this.bingoService.getRooms();
   }
 
   @Post('bingo-bots')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create a Bingo bot account and assign it to a room (Admin only)' })
+  @ApiOperation({ summary: 'Create a Bingo bot account and assign it to a room (Admin/Mod)' })
   async createBingoBot(@Body() dto: CreateBingoBotDto) {
     return this.bingoBotService.createBot(dto);
   }
 
   @Patch('bingo-bots/:id')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: "Update a Bingo bot's cards/auto-top-up settings (Admin only)" })
+  @ApiOperation({ summary: "Update a Bingo bot's cards/auto-top-up settings (Admin/Mod)" })
   async updateBingoBot(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateBingoBotDto) {
     return this.bingoBotService.updateBot(id, dto);
   }
 
   @Post('bingo-bots/:id/connect')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: 'Connect an existing (reusable) bot to a room — same one or a different one (Admin only)' })
+  @ApiOperation({ summary: 'Connect an existing (reusable) bot to a room — same one or a different one (Admin/Mod)' })
   async connectBingoBot(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ConnectBingoBotDto) {
     return this.bingoBotService.connectBot(id, dto);
   }
 
   @Post('bingo-bots/:id/disconnect')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: 'Disconnect a bot from its current room without deleting it — stays reusable (Admin only)' })
+  @ApiOperation({ summary: 'Disconnect a bot from its current room without deleting it — stays reusable (Admin/Mod)' })
   async disconnectBingoBot(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.bingoBotService.disconnectBot(id);
   }
 
   @Delete('bingo-bots/:id')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'id', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: 'Permanently delete a bot account (Admin only)' })
+  @ApiOperation({ summary: 'Permanently delete a bot account (Admin/Mod)' })
   async deleteBingoBot(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.bingoBotService.deleteBot(id);
   }
@@ -143,16 +136,14 @@ export class AdminController {
   // ---------------------------------------------------------------------------------------------
 
   @Get('mines-bots')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'List every bot with its Mines config (Admin only)' })
+  @ApiOperation({ summary: 'List every bot with its Mines config (Admin/Mod)' })
   async listMinesBots() {
     return this.minesBotService.listConfigs();
   }
 
   @Put('mines-bots/:botId')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'botId', description: 'BingoRoomBot UUID' })
-  @ApiOperation({ summary: 'Upsert a bot\'s Mines config (Admin only)' })
+  @ApiOperation({ summary: 'Upsert a bot\'s Mines config (Admin/Mod)' })
   async upsertMinesBot(@Param('botId', new ParseUUIDPipe()) botId: string, @Body() dto: UpsertMinesBotConfigDto) {
     return this.minesBotService.upsertConfig(botId, dto);
   }
@@ -162,17 +153,15 @@ export class AdminController {
   // ---------------------------------------------------------------------------------------------
 
   @Get('unity-bots')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'List every bot with its Unity-game activity config, one row per bot (Admin only)' })
+  @ApiOperation({ summary: 'List every bot with its Unity-game activity config, one row per bot (Admin/Mod)' })
   async listUnityBots() {
     return this.unityGameBotService.listConfigs();
   }
 
   @Put('unity-bots/:botId/:gameSlug')
-  @Roles(Role.ADMIN)
   @ApiParam({ name: 'botId', description: 'BingoRoomBot UUID' })
   @ApiParam({ name: 'gameSlug', description: 'One of the 5 Unity game slugs' })
-  @ApiOperation({ summary: "Upsert a bot's activity config for one Unity game (Admin only)" })
+  @ApiOperation({ summary: "Upsert a bot's activity config for one Unity game (Admin/Mod)" })
   async upsertUnityBot(
     @Param('botId', new ParseUUIDPipe()) botId: string,
     @Param('gameSlug') gameSlug: string,
