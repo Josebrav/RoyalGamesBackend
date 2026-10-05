@@ -45,7 +45,8 @@ export class PaymentsController {
     summary: 'Create MercadoPago order using a country-specific seller account',
     description:
       'country debe ser ar, co o mx. Usa la cuenta vendedora de ese país y fuerza ' +
-      'su moneda real (ARS/COP/MXN) — el body no incluye currency.',
+      'su moneda real (ARS/COP/MXN). El body solo trae userId y packageId: fichas y ' +
+      'precio salen del catálogo del backend.',
   })
   @ApiParam({ name: 'country', description: 'ar | co | mx' })
   @ApiResponse({ status: 201, description: 'Order created successfully' })

@@ -14,15 +14,32 @@ import { PaymentsRepository } from './repositories/payments.repository';
 import { MercadoPagoRepository } from './repositories/mercadopago.repository';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { UsersService } from '../users/users.service';
+import { ChipPackage, findChipPackage } from './chip-packages';
 
 export type MercadoPagoCountry = 'ar' | 'co' | 'mx';
 
-/** Una cuenta vendedora de MercadoPago por país; cada una solo liquida en su propia moneda. */
-const MERCADOPAGO_COUNTRY_CONFIG: Record<MercadoPagoCountry, { currency: string; envVar: string }> = {
-  ar: { currency: 'ARS', envVar: 'MERCADOPAGO_ACCESS_TOKEN_AR' },
-  co: { currency: 'COP', envVar: 'MERCADOPAGO_ACCESS_TOKEN_CO' },
-  mx: { currency: 'MXN', envVar: 'MERCADOPAGO_ACCESS_TOKEN_MX' },
+/**
+ * Una cuenta vendedora de MercadoPago por país; cada una solo liquida en su propia moneda.
+ * `usdRate` convierte el precio en USD del paquete a la moneda local (mismas tasas que
+ * muestra el front en buyChips.jsx).
+ */
+const MERCADOPAGO_COUNTRY_CONFIG: Record<
+  MercadoPagoCountry,
+  { currency: string; envVar: string; usdRate: number }
+> = {
+  ar: { currency: 'ARS', envVar: 'MERCADOPAGO_ACCESS_TOKEN_AR', usdRate: 1000 },
+  co: { currency: 'COP', envVar: 'MERCADOPAGO_ACCESS_TOKEN_CO', usdRate: 5200 },
+  mx: { currency: 'MXN', envVar: 'MERCADOPAGO_ACCESS_TOKEN_MX', usdRate: 20 },
 };
+
+/** Busca el paquete o tira 400: el cliente nunca decide fichas ni precio. */
+function getChipPackageOrThrow(packageId: number): ChipPackage {
+  const chipPackage = findChipPackage(packageId);
+  if (!chipPackage) {
+    throw new BadRequestException(`Paquete de fichas inexistente: ${packageId}`);
+  }
+  return chipPackage;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -111,10 +128,12 @@ export class PaymentsService {
       );
     }
 
+    const chipPackage = getChipPackageOrThrow(dto.packageId);
+
     return this.buildAndPersistMercadoPagoOrder({
       userId: dto.userId,
-      chips: dto.chips,
-      price: dto.price,
+      chips: chipPackage.chips,
+      price: (chipPackage.priceUsd * config.usdRate).toFixed(2),
       currency: config.currency,
       accessToken,
     });
@@ -312,6 +331,7 @@ export class PaymentsService {
   }
 
   async createPayPalOrder(createPayPalOrderDto: CreatePayPalOrderDto): Promise<any> {
+    const chipPackage = getChipPackageOrThrow(createPayPalOrderDto.packageId);
     const user = await this.usersRepository.findOne({
       where: { id: createPayPalOrderDto.userId },
     });
@@ -331,9 +351,9 @@ export class PaymentsService {
           {
             amount: {
               currency_code: 'USD',
-              value: createPayPalOrderDto.price,
+              value: chipPackage.priceUsd.toFixed(2),
             },
-            description: `Royal Games - ${createPayPalOrderDto.chips} Chips`,
+            description: `Royal Games - ${chipPackage.chips} Chips`,
             custom_id: createPayPalOrderDto.userId,
           },
         ],
@@ -355,6 +375,7 @@ export class PaymentsService {
   }
 
   async capturePayPalOrder(capturePayPalOrderDto: CapturePayPalOrderDto): Promise<any> {
+    const chipPackage = getChipPackageOrThrow(capturePayPalOrderDto.packageId);
     const user = await this.usersRepository.findOne({
       where: { id: capturePayPalOrderDto.userId },
     });
@@ -393,11 +414,11 @@ export class PaymentsService {
           });
 
           if (transactionUser) {
-            transactionUser.chips = Number(transactionUser.chips || 0) + capturePayPalOrderDto.chips;
+            transactionUser.chips = Number(transactionUser.chips || 0) + chipPackage.chips;
             await manager.save(User, transactionUser);
             await this.usersService.registerDeposit(
               capturePayPalOrderDto.userId,
-              capturePayPalOrderDto.chips,
+              chipPackage.chips,
               manager,
             );
           }
@@ -406,8 +427,8 @@ export class PaymentsService {
             Pay,
             manager.create(Pay, {
               userId: capturePayPalOrderDto.userId,
-              chips: capturePayPalOrderDto.chips,
-              price: capturePayPalOrderDto.price,
+              chips: chipPackage.chips,
+              price: chipPackage.priceUsd.toFixed(2),
               currency: 'USD', // PayPal siempre cobra en USD en este flujo (ver createPayPalOrder)
               paymentPlatform: 'paypal',
               mercadoPagoPaymentId: paymentId,
@@ -416,7 +437,7 @@ export class PaymentsService {
             }),
           );
 
-          this.logger.log(`PayPal payment captured for user ${capturePayPalOrderDto.userId}: +${capturePayPalOrderDto.chips} chips`);
+          this.logger.log(`PayPal payment captured for user ${capturePayPalOrderDto.userId}: +${chipPackage.chips} chips`);
           return response.result;
         });
       }

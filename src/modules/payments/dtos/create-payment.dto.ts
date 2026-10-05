@@ -1,25 +1,20 @@
-import { IsUUID, IsNumber, IsString, Min } from 'class-validator';
+import { IsUUID, IsInt, IsString, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
  * DTO para POST /mepago/create-order/:country (ar | co | mx).
- * No recibe `currency`: la moneda queda fija según el país de la ruta, para
- * que sea imposible mandar una moneda que no coincide con la cuenta
- * vendedora real de ese país.
+ * Solo recibe el paquete: fichas, precio y moneda los decide el backend
+ * (ver chip-packages.ts y MERCADOPAGO_COUNTRY_CONFIG).
  */
 export class CreateMercadoPagoOrderByCountryDto {
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'User ID' })
   @IsUUID()
   userId: string;
 
-  @ApiProperty({ example: 100, description: 'Chips amount' })
-  @IsNumber()
+  @ApiProperty({ example: 1, description: 'ID del paquete de fichas (ver chip-packages.ts)' })
+  @IsInt()
   @Min(1)
-  chips: number;
-
-  @ApiProperty({ example: '10.00', description: 'Price in the destination country currency' })
-  @IsString()
-  price: string;
+  packageId: number;
 }
 
 export class CreatePayPalOrderDto {
@@ -27,14 +22,10 @@ export class CreatePayPalOrderDto {
   @IsUUID()
   userId: string;
 
-  @ApiProperty({ example: 100, description: 'Chips amount' })
-  @IsNumber()
+  @ApiProperty({ example: 1, description: 'ID del paquete de fichas (ver chip-packages.ts)' })
+  @IsInt()
   @Min(1)
-  chips: number;
-
-  @ApiProperty({ example: '10.00', description: 'Price in USD' })
-  @IsString()
-  price: string;
+  packageId: number;
 }
 
 export class CapturePayPalOrderDto {
@@ -46,12 +37,8 @@ export class CapturePayPalOrderDto {
   @IsUUID()
   userId: string;
 
-  @ApiProperty({ example: 100, description: 'Chips amount' })
-  @IsNumber()
+  @ApiProperty({ example: 1, description: 'ID del paquete de fichas (ver chip-packages.ts)' })
+  @IsInt()
   @Min(1)
-  chips: number;
-
-   @ApiProperty({ example: '10.00', description: 'Price in USD' })
-  @IsString()
-  price: string;
+  packageId: number;
 }
