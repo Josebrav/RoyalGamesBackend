@@ -19,6 +19,7 @@ import { SupportModule } from './modules/support/support.module';
 import { BlocksModule } from './modules/blocks/blocks.module';
 import { PrizesModule } from './modules/prizes/prizes.module';
 import { CareersModule } from './modules/careers/careers.module';
+import { ContactModule } from './modules/contact/contact.module';
 import { MinesModule } from './modules/mines/mines.module';
 import { SiteContentModule } from './modules/site-content/site-content.module';
 import { NewsModule } from './modules/news/news.module';
@@ -69,6 +70,7 @@ import { AppService } from './app.service';
     BlocksModule,
     PrizesModule,
     CareersModule,
+    ContactModule,
     MinesModule,
     SiteContentModule,
     NewsModule,
