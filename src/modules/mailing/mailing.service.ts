@@ -8,43 +8,58 @@ interface MailAttachment {
   contentType?: string;
 }
 
-const RESEND_API_URL = 'https://api.resend.com/emails';
+const SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send';
 
 // Render (and most PaaS free/starter tiers) block outbound SMTP ports (465/587), which made
-// direct Gmail SMTP time out silently in production even though it worked fine locally. Resend's
-// API runs over plain HTTPS (443), which isn't blocked.
+// direct Gmail SMTP time out silently in production even though it worked fine locally. SendGrid's
+// API runs over plain HTTPS (443), which isn't blocked. (Previously used Resend; swapped after its
+// API key started getting rejected as invalid in production.)
 @Injectable()
 export class MailingService {
   private readonly logger = new Logger(MailingService.name);
-  private readonly fromAddress =
-    process.env.RESEND_FROM_EMAIL || 'RoyalGames <onboarding@resend.dev>';
+  private readonly fromRaw =
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.RESEND_FROM_EMAIL ||
+    'RoyalGames <noreply@royalgames.lat>';
+
+  // SendGrid wants { email, name } instead of the "Name <email>" string format Resend used.
+  private get from(): { email: string; name?: string } {
+    const match = this.fromRaw.match(/^(.*)<(.+)>$/);
+    if (match) {
+      return { name: match[1].trim() || undefined, email: match[2].trim() };
+    }
+    return { email: this.fromRaw.trim() };
+  }
 
   async sendMail(sendMailDto: SendMailDto & { attachments?: MailAttachment[] }): Promise<any> {
     try {
       const payload: Record<string, unknown> = {
-        from: this.fromAddress,
-        to: sendMailDto.to,
+        personalizations: [{ to: [{ email: sendMailDto.to }] }],
+        from: this.from,
         subject: sendMailDto.subject,
-        html: sendMailDto.html,
+        content: [{ type: 'text/html', value: sendMailDto.html }],
       };
       if (sendMailDto.attachments?.length) {
         payload.attachments = sendMailDto.attachments.map((att) => ({
           filename: att.filename,
           content: att.content.toString('base64'),
+          type: att.contentType,
+          disposition: 'attachment',
         }));
       }
 
-      const { data } = await axios.post(RESEND_API_URL, payload, {
+      const response = await axios.post(SENDGRID_API_URL, payload, {
         headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
           'Content-Type': 'application/json',
         },
       });
-      this.logger.log(`Email sent: ${data.id}`);
+      const messageId = response.headers['x-message-id'];
+      this.logger.log(`Email sent: ${messageId}`);
       return {
         success: true,
         message: 'Email sent successfully',
-        messageId: data.id,
+        messageId,
       };
     } catch (error) {
       const msg = axios.isAxiosError(error)
