@@ -21,6 +21,11 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://royalgames.lat';
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS) || 30;
 const REFRESH_TOKEN_TTL_MS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
+// Dos pestañas del mismo usuario pueden refrescar casi al mismo tiempo (ambas leen la
+// misma cookie, mandan el mismo refresh token, y una gana la rotación antes que la otra
+// termine). Sin esto, la segunda parece "reuso" de un token ya rotado y dispara la
+// revocación de toda la cuenta — cerrando la sesión en todos lados sin que haya robo real.
+const REFRESH_REUSE_GRACE_MS = 10_000;
 
 @Injectable()
 export class AuthService {
@@ -266,21 +271,32 @@ export class AuthService {
     }
 
     const tokenHash = this.hashToken(rawToken);
-    const stored = await this.refreshTokenRepository.findOne({ where: { tokenHash } });
+    let stored = await this.refreshTokenRepository.findOne({ where: { tokenHash } });
 
     if (!stored) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
     if (stored.revokedAt) {
-      await this.refreshTokenRepository.query(
-        `UPDATE refresh_tokens SET "revokedAt" = now() WHERE "userId" = $1 AND "revokedAt" IS NULL`,
-        [stored.userId],
-      );
-      this.logger.warn(
-        `Refresh token reuse detected for user ${stored.userId} — todas sus sesiones fueron revocadas`,
-      );
-      throw new UnauthorizedException('Refresh token already used');
+      const withinGrace = Date.now() - stored.revokedAt.getTime() < REFRESH_REUSE_GRACE_MS;
+      const replacement = withinGrace && stored.replacedByHash
+        ? await this.refreshTokenRepository.findOne({ where: { tokenHash: stored.replacedByHash } })
+        : null;
+
+      if (replacement && !replacement.revokedAt && replacement.expiresAt.getTime() > Date.now()) {
+        // Carrera benigna entre pestañas, no robo: seguimos la cadena hasta el token
+        // que ya reemplazó a este y rotamos a partir de ahí, en vez de cerrar todo.
+        stored = replacement;
+      } else {
+        await this.refreshTokenRepository.query(
+          `UPDATE refresh_tokens SET "revokedAt" = now() WHERE "userId" = $1 AND "revokedAt" IS NULL`,
+          [stored.userId],
+        );
+        this.logger.warn(
+          `Refresh token reuse detected for user ${stored.userId} — todas sus sesiones fueron revocadas`,
+        );
+        throw new UnauthorizedException('Refresh token already used');
+      }
     }
 
     if (stored.expiresAt.getTime() < Date.now()) {
