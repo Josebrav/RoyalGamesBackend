@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { GemasOfGoldRound } from './entities/gemasofgold-round.entity';
 import { User } from '../users/entities/user.entity';
 import { ChipsAward } from '../chips/entities/chips-award.entity';
 import { BASE_FREE_SPINS } from './constants/slot.constants';
+import {
+  GEMASOFGOLD_JACKPOT_CONTRIBUTION_RATE,
+  GemasOfGoldJackpotTier,
+} from './constants/jackpot.constants';
 import { classify, countGold, freshGrid, rollRemaining, sumMultCells } from './slot-engine';
 
 export interface SpinResult {
@@ -54,6 +58,7 @@ export class GemasOfGoldSlotService {
 
       user.chips = Number(user.chips) - betAmount;
       await manager.save(user);
+      await this.contributeToJackpots(manager, betAmount);
 
       const { cells } = rollRemaining(freshGrid());
       const { leftMult, rightMult, midGold } = classify(cells);
@@ -95,6 +100,29 @@ export class GemasOfGoldSlotService {
 
       return { phase: 'no_win', cells, chips: Number(user.chips) };
     });
+  }
+
+  // Cada tirada base suma un % de la apuesta a cada uno de los 4 pozos compartidos, en la misma
+  // transacción que descuenta la apuesta (si la tirada falla, el aporte también se revierte).
+  // Math.max(1, ...) igual que en Mines: con apuestas chicas el % redondearía a 0. Las tiradas
+  // gratis del bonus no apuestan, así que no aportan.
+  private async contributeToJackpots(manager: EntityManager, betAmount: number) {
+    const amount = (tier: GemasOfGoldJackpotTier) =>
+      Math.max(1, Math.round(betAmount * GEMASOFGOLD_JACKPOT_CONTRIBUTION_RATE[tier]));
+
+    await manager.query(
+      `
+      UPDATE gemasofgold_jackpot
+      SET "potAmount" = "potAmount" + CASE tier
+        WHEN 'grand' THEN $1::bigint
+        WHEN 'major' THEN $2::bigint
+        WHEN 'minor' THEN $3::bigint
+        WHEN 'mini' THEN $4::bigint
+        ELSE 0
+      END
+      `,
+      [amount('grand'), amount('major'), amount('minor'), amount('mini')],
+    );
   }
 
   private async continueBonus(manager: any, round: GemasOfGoldRound): Promise<SpinResult> {
