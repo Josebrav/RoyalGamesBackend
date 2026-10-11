@@ -126,7 +126,7 @@ export class GemasOfGoldSlotService {
   }
 
   private async continueBonus(manager: any, round: GemasOfGoldRound): Promise<SpinResult> {
-    const { cells, changed } = rollRemaining(round.cells);
+    const { cells, changed } = rollRemaining(round.cells, true);
     round.cells = cells;
     round.goldCount = countGold(cells);
 

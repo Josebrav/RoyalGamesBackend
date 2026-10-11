@@ -6,6 +6,8 @@ import {
   RIGHT_COL_INDEXES,
   SIDE_GEM_LAND_CHANCE,
   MIDDLE_GOLD_LAND_CHANCE,
+  BONUS_SIDE_GEM_LAND_CHANCE,
+  BONUS_MIDDLE_GOLD_LAND_CHANCE,
   MULTIPLIER_VALUES,
   MULTIPLIER_WEIGHTS,
 } from './constants/slot.constants';
@@ -33,13 +35,19 @@ function rollMultiplierValue(): number {
 // Vuelve a tirar solo las celdas que todavía están en null dentro de `existing` (vacío significa
 // "sin resolver", no "bloqueada") - las que ya tienen símbolo quedan pegadas tal cual. Con
 // `existing` todo en null (grilla nueva) esto mismo sirve para la tirada base, no hace falta una
-// función separada para eso.
-export function rollRemaining(existing: GemasOfGoldCell[]): { cells: GemasOfGoldCell[]; changed: boolean } {
+// función separada para eso. `inBonus` elige las probabilidades del bonus en vez de las de la
+// tirada base (ver slot.constants.ts).
+export function rollRemaining(
+  existing: GemasOfGoldCell[],
+  inBonus = false,
+): { cells: GemasOfGoldCell[]; changed: boolean } {
+  const sideChance = inBonus ? BONUS_SIDE_GEM_LAND_CHANCE : SIDE_GEM_LAND_CHANCE;
+  const goldChance = inBonus ? BONUS_MIDDLE_GOLD_LAND_CHANCE : MIDDLE_GOLD_LAND_CHANCE;
   const cells = existing.map((c) => ({ ...c }));
   let changed = false;
 
   for (const idx of [...LEFT_COL_INDEXES, ...RIGHT_COL_INDEXES]) {
-    if (cells[idx].symbol === null && Math.random() < SIDE_GEM_LAND_CHANCE) {
+    if (cells[idx].symbol === null && Math.random() < sideChance) {
       cells[idx] = { symbol: 'mult', value: rollMultiplierValue() };
       changed = true;
     }
@@ -48,7 +56,7 @@ export function rollRemaining(existing: GemasOfGoldCell[]): { cells: GemasOfGold
   // A lo sumo UNA gema gold nueva por tirada (pedido explícito del usuario) - se sortea una sola
   // vez si cae o no, y si cae se reparte entre las celdas del medio todavía vacías.
   const blankMidIndexes = MID_COL_INDEXES.filter((idx) => cells[idx].symbol === null);
-  if (blankMidIndexes.length > 0 && Math.random() < MIDDLE_GOLD_LAND_CHANCE) {
+  if (blankMidIndexes.length > 0 && Math.random() < goldChance) {
     const pick = blankMidIndexes[Math.floor(Math.random() * blankMidIndexes.length)];
     cells[pick] = { symbol: 'gold', value: 0 };
     changed = true;
