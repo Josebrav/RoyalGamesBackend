@@ -21,6 +21,11 @@ export const GEMASOFGOLD_JACKPOT_CONTRIBUTION_RATE: Record<GemasOfGoldJackpotTie
   mini: 0.01,
 };
 
+// Una vez habilitado un pozo (pasó su ventana de abajo), probabilidad por tirada base de que caiga
+// su gema (en una casilla al azar de toda la grilla) - ~1 de cada 25 tiradas, para que llegue a
+// los pocos minutos de juego sin ser predecible. Elegido por el usuario (2026-10-11).
+export const GEMASOFGOLD_JACKPOT_LAND_CHANCE = 0.04;
+
 // Ventanas de elegibilidad pedidas por el usuario (2026-10-08): mini ~1h, minor ~2-3h,
 // major ~4-5h, grand ~6-7h. Se usó el punto medio de cada rango - ajustable sin migración, son
 // solo el valor con el que se re-arma nextEligibleAt cada vez que un pozo se reclama.

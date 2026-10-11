@@ -9,7 +9,9 @@ import {
 export type GemasOfGoldRoundStatus = 'active' | 'completed';
 
 export interface GemasOfGoldCell {
-  symbol: 'mult' | 'gold' | null;
+  // 'grand' | 'major' | 'minor' | 'mini' = gema de jackpot (solo en tiradas base, ver
+  // GemasOfGoldSlotService.tryJackpot) - no cuenta para multiplicadores ni golds.
+  symbol: 'mult' | 'gold' | 'grand' | 'major' | 'minor' | 'mini' | null;
   value: number | null;
 }
 

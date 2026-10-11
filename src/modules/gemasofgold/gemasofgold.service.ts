@@ -8,13 +8,7 @@ import { GEMASOFGOLD_JACKPOT_TIERS } from './constants/jackpot.constants';
 export class GemasOfGoldService {
   constructor(@InjectDataSource() private dataSource: DataSource) {}
 
-  /**
-   * Pozos actuales de los 4 niveles, para el panel Grand/Major/Minor/Mini que muestra JackpotManager.cs.
-   * Solo lectura por ahora: todavía no hay forma de aportar a los pozos ni de reclamarlos porque eso
-   * tiene que ser atómico con la tirada real (ver MinesService.startRound/revealTile para el patrón
-   * a seguir), y GemasOfGold todavía no tiene su endpoint de tirada - se suma cuando se defina la
-   * modalidad de juego y los símbolos.
-   */
+  /** Pozos actuales de los 4 niveles, para el panel Grand/Major/Minor/Mini que muestra JackpotManager.cs. */
   async getJackpotStatus() {
     const rows = await this.dataSource.manager.find(GemasOfGoldJackpot);
     const byTier = new Map(rows.map((r) => [r.tier, r]));
@@ -30,8 +24,6 @@ export class GemasOfGoldService {
       };
     }
 
-    // Formato plano (grand/major/minor/mini: number) además del detalle por nivel, porque
-    // JackpotManager.cs del lado Unity todavía solo necesita el monto para mostrar.
     return {
       grand: result.grand.potAmount,
       major: result.major.potAmount,
