@@ -24,6 +24,7 @@ export const ALLOWED_ORIGINS = [
   'https://santawilds.s3.us-east-2.amazonaws.com',
   'https://royalslots.s3.us-east-2.amazonaws.com',
   'https://sugarcalavera.s3.us-east-1.amazonaws.com',
+  'https://gemaofgold.s3.us-east-2.amazonaws.com',
 ];
 
 export function isOriginAllowed(origin: string | undefined | null): boolean {
