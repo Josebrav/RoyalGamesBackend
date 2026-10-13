@@ -29,6 +29,7 @@ import { SantaWildsModule } from './modules/santawilds/santawilds.module';
 import { DailySpinModule } from './modules/daily-spin/daily-spin.module';
 import { DailyBonusModule } from './modules/daily-bonus/daily-bonus.module';
 import { GemasOfGoldModule } from './modules/gemasofgold/gemasofgold.module';
+import { DominoModule } from './modules/domino/domino.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -81,6 +82,7 @@ import { AppService } from './app.service';
     DailySpinModule,
     DailyBonusModule,
     GemasOfGoldModule,
+    DominoModule,
   ],
   controllers: [AppController],
   providers: [
