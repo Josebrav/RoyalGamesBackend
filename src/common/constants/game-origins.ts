@@ -20,3 +20,8 @@ export function resolveGameSlugFromOrigin(origin: string | undefined | null): st
   if (!origin) return null;
   return ORIGIN_TO_GAME_SLUG[origin] || null;
 }
+
+// Catálogo de slugs válidos, derivado del mapa de arriba - usado para validar el campo `game`
+// client-supplied de módulos que (a diferencia de ChipsController) no mueven plata y por lo tanto
+// no necesitan resolverlo server-side desde el Origin (ver FreeSpinsModule).
+export const KNOWN_GAME_SLUGS = [...new Set(Object.values(ORIGIN_TO_GAME_SLUG))];
