@@ -11,14 +11,15 @@ export const GEMASOFGOLD_JACKPOT_IDS: Record<GemasOfGoldJackpotTier, string> = {
   mini: '22222222-2222-2222-2222-222222222224',
 };
 
-// PLACEHOLDER - a diferencia de MINES_JACKPOT_CONTRIBUTION_RATE (1%, confirmado con producto),
-// estos % todavía no están confirmados. Ajustar antes de ir a producción. Pensados como % de cada
-// apuesta que se suma a cada pozo (el más caro/raro recibe menos para que tarde más en vaciarse).
+// % de cada apuesta que se suma a cada pozo (2% en total, cuenta dentro del RTP de 95%). El
+// más grande recibe más: cada pozo crece en proporción a lo que tarda en salir (ver
+// GEMASOFGOLD_JACKPOT_ELIGIBILITY_WINDOW_MS) - con el reparto anterior (mini 1% ... grand 0.1%)
+// el Grand terminaba más chico que el Major y el Minor (2026-10-14).
 export const GEMASOFGOLD_JACKPOT_CONTRIBUTION_RATE: Record<GemasOfGoldJackpotTier, number> = {
-  grand: 0.001,
-  major: 0.003,
-  minor: 0.006,
-  mini: 0.01,
+  grand: 0.01,
+  major: 0.0055,
+  minor: 0.003,
+  mini: 0.0015,
 };
 
 // Una vez habilitado un pozo (pasó su ventana de abajo), probabilidad por tirada base de que caiga
