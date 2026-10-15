@@ -1,4 +1,5 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { FreeSpinsService } from './free-spins.service';
 import { StartFreeSpinSessionDto } from './dtos/start-free-spin-session.dto';
@@ -33,6 +34,10 @@ export class FreeSpinsController {
     return this.freeSpinsService.extendSession(dto);
   }
 
+  // Límite propio más alto que el default global (100/60s): esto se llama en cada tirada del
+  // bono, y con el modo turbo de los slots (varios giros por segundo) se agotaba el límite
+  // compartido con el resto de los endpoints (ver chips.controller.ts).
+  @Throttle({ default: { limit: 300, ttl: 60000 } })
   @Post('progress')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Guarda el progreso absoluto de la ronda tras cada tirada' })

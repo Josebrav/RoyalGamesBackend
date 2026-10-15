@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -39,6 +40,11 @@ export class ChipsController {
   // with no JWT (they only know the player's userId). OptionalJwtAuthGuard is used purely to
   // tag who made the call (admin vs. an anonymous game client) for the chips_awards ledger —
   // it never blocks the request.
+  // Límite propio más alto que el default global (100/60s): el modo turbo de los slots puede
+  // tirar varios giros por segundo, y cada giro ganador pega acá - con el límite global
+  // compartido entre todos los endpoints, una sesión jugando rápido lo agotaba enseguida y el
+  // juego se quedaba sin poder acreditar/descontar fichas (ver remove/chips más abajo).
+  @Throttle({ default: { limit: 300, ttl: 60000 } })
   @Put('add/chips')
   @UseGuards(OptionalJwtAuthGuard)
   @HttpCode(HttpStatus.OK)
@@ -58,6 +64,8 @@ export class ChipsController {
     return this.chipsService.addChips(chipsTransactionDto, source, game, isStaff ? user.id : null);
   }
 
+  // Mismo límite más alto que add/chips arriba (modo turbo de los slots).
+  @Throttle({ default: { limit: 300, ttl: 60000 } })
   @Put('remove/chips')
   @UseGuards(OptionalJwtAuthGuard)
   @HttpCode(HttpStatus.OK)
