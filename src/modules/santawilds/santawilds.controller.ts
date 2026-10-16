@@ -6,6 +6,7 @@ import { SantaWildsSlotService } from './santawilds-slot.service';
 import { SetJackpotProgressDto } from './dtos/set-jackpot-progress.dto';
 import { SetLastBetDto } from './dtos/set-last-bet.dto';
 import { SpinDto } from './dtos/spin.dto';
+import { ResumeDto } from './dtos/resume.dto';
 
 // Sin guard, igual que ChipsController/GemasOfGoldController: el cliente es el build WebGL
 // embebido en un iframe, sin JWT, que solo conoce el jugadorID (ver ChipManager.cs /
@@ -30,7 +31,16 @@ export class SantaWildsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resolve one base spin or one bonus free-spin for this player (server-authoritative)' })
   spin(@Body() dto: SpinDto) {
-    return this.santaWildsSlotService.spin(dto.jugadorId, dto.betAmount);
+    return this.santaWildsSlotService.spin(dto.jugadorId, dto.betAmount, dto.clientToken, dto.bonusSpin);
+  }
+
+  // Al cargar el juego: retoma el bono de esta pestaña (recarga) o uno abandonado por otra.
+  // Ver common/utils/slot-round-ownership.ts.
+  @Post('resume')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Claim this window\'s in-progress bonus (or an abandoned one) when the game loads' })
+  resume(@Body() dto: ResumeDto) {
+    return this.santaWildsSlotService.resume(dto.jugadorId, dto.clientToken);
   }
 
   // Límite propio más alto que el default global (100/60s): a diferencia de los otros slots,

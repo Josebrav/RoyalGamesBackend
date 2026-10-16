@@ -6,17 +6,16 @@ export type FreeSpinSessionStatus = 'active' | 'finished';
  * Caché de resume para una ronda de tiradas gratis en curso (SCATTER o comprada), genérico por
  * juego - NO es un ledger de fichas (eso sigue siendo chips_awards) ni mueve plata por sí mismo:
  * el cliente (Unity, client-authoritative) sigue siendo dueño del RNG y el pago, esta tabla solo
- * le permite retomar exacto si se corta la conexión a mitad de ronda. Una fila por (userId, game),
- * se pisa en cada ronda nueva - igual que santawilds_jackpot_progress, sin historial.
+ * le permite retomar exacto si se corta la conexión a mitad de ronda. Una fila por (userId, game,
+ * ownerToken): cada pestaña tiene su propia ronda y no ve la de otra (ver
+ * common/utils/slot-round-ownership.ts).
  *
- * ownerToken: a qué ventana/pestaña pertenece la ronda ahora mismo. "resume" siempre reclama la
- * fila sin chequear el token actual (reconectar ES el evento de takeover); cualquier otra
- * escritura (extend/progress/finish) exige que el token coincida, si no se rechaza - así una
- * ventana vieja que siga mandando tiradas después de que otra más nueva tomó el control deja de
- * poder escribir, sin necesidad de una tabla de sesiones aparte.
+ * ownerToken: pestaña dueña de la ronda (tabId que la página le pasa al juego, estable al recargar
+ * esa misma pestaña). extend/progress/finish solo tocan la fila propia; "resume" retoma la propia o
+ * una abandonada por otra pestaña hace más de ORPHANED_ROUND_TAKEOVER_MS, nunca una en juego.
  */
 @Entity('free_spin_sessions')
-@Index(['userId', 'game'], { unique: true })
+@Index(['userId', 'game', 'ownerToken'], { unique: true })
 export class FreeSpinSession {
   @PrimaryGeneratedColumn('uuid')
   id: string;

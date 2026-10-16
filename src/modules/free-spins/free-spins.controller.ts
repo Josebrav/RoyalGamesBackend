@@ -19,7 +19,7 @@ export class FreeSpinsController {
 
   @Post('start')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Arranca (o reinicia) la ronda de tiradas gratis y la reclama para esta ventana' })
+  @ApiOperation({ summary: 'Arranca (o reinicia) la ronda de tiradas gratis de esta pestaña' })
   @ApiResponse({ status: 200, description: 'Estado inicial de la ronda' })
   start(@Body() dto: StartFreeSpinSessionDto) {
     return this.freeSpinsService.startSession(dto);
@@ -58,7 +58,7 @@ export class FreeSpinsController {
 
   @Post('resume')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Busca una ronda activa para retomar al cargar el juego; si existe, la reclama para esta ventana' })
+  @ApiOperation({ summary: 'Al cargar el juego: retoma la ronda de esta pestaña o una abandonada por otra (nunca una en juego)' })
   @ApiResponse({ status: 200, description: '{ active: false } si no hay ronda, o { active: true, ...estado }' })
   resume(@Body() dto: ResumeFreeSpinSessionDto) {
     return this.freeSpinsService.resumeSession(dto);

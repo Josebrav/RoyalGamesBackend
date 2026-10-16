@@ -36,6 +36,13 @@ export class SantaWildsRound {
   @Column({ type: 'varchar', length: 20, default: 'active' })
   status: SantaWildsRoundStatus;
 
+  // Pestaña dueña del bono (ver common/utils/slot-round-ownership.ts). Null = cliente viejo.
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  ownerToken: string | null;
+
+  @Column({ type: 'timestamptz', default: () => 'now()' })
+  lastSpinAt: Date;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

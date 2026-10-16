@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GemasOfGoldService } from './gemasofgold.service';
 import { GemasOfGoldSlotService } from './gemasofgold-slot.service';
 import { SpinDto } from './dtos/spin.dto';
+import { ResumeDto } from './dtos/resume.dto';
 
 // Sin guard, mismo criterio que games/mines y santawilds: lo consulta el cliente Unity (WebGL),
 // que no tiene JWT propio - confía en el jugadorID como ya hacen /add/chips y /remove/chips
@@ -29,6 +30,15 @@ export class GemasOfGoldController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resolve one base spin or one bonus free-spin for this player (server-authoritative)' })
   async spin(@Body() dto: SpinDto) {
-    return this.gemasOfGoldSlotService.spin(dto.jugadorId, dto.betAmount);
+    return this.gemasOfGoldSlotService.spin(dto.jugadorId, dto.betAmount, dto.clientToken, dto.bonusSpin);
+  }
+
+  // Al cargar el juego: retoma el bonus de esta pestaña (recarga) o uno abandonado por otra.
+  // Ver common/utils/slot-round-ownership.ts.
+  @Post('resume')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Claim this window\'s in-progress bonus (or an abandoned one) when the game loads' })
+  async resume(@Body() dto: ResumeDto) {
+    return this.gemasOfGoldSlotService.resume(dto.jugadorId, dto.clientToken);
   }
 }

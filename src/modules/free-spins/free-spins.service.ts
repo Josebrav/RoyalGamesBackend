@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { FreeSpinSession } from './entities/free-spin-session.entity';
 import { StartFreeSpinSessionDto } from './dtos/start-free-spin-session.dto';
 import { ExtendFreeSpinSessionDto } from './dtos/extend-free-spin-session.dto';
@@ -8,6 +8,7 @@ import { ReportFreeSpinProgressDto } from './dtos/report-free-spin-progress.dto'
 import { FinishFreeSpinSessionDto } from './dtos/finish-free-spin-session.dto';
 import { ResumeFreeSpinSessionDto } from './dtos/resume-free-spin-session.dto';
 import { FreeSpinSessionIdentityDto } from './dtos/free-spin-session-identity.dto';
+import { ORPHANED_ROUND_TAKEOVER_MS } from '../../common/utils/slot-round-ownership';
 
 export interface FreeSpinSessionSnapshot {
   betAmount: number;
@@ -34,15 +35,19 @@ export class FreeSpinsService {
     };
   }
 
-  /** Arranca (o reinicia de cero) la ronda de este (userId, game) y la reclama para
-   *  dto.clientToken. Quien dispara un "start" siempre es la ventana que acaba de otorgar la
-   *  ronda (SCATTER o compra confirmada), así que no hay nada que arbitrar acá - a diferencia de
-   *  extend/progress/finish, no exige que ningún token previo coincida. */
+  /** Arranca (o reinicia de cero) la ronda de ESTA pestaña. Quien dispara un "start" siempre es la
+   *  pestaña que acaba de otorgar la ronda (SCATTER o compra confirmada) - no toca las rondas de
+   *  otras pestañas del mismo jugador, que siguen cada una por su lado. */
   async startSession(dto: StartFreeSpinSessionDto): Promise<FreeSpinSessionSnapshot> {
-    let row = await this.repository.findOne({ where: { userId: dto.userId, game: dto.game } });
+    // Las rondas ya terminadas no sirven para nada (no es un historial): se limpian acá para que
+    // la tabla no crezca con una fila por cada pestaña que alguna vez jugó.
+    await this.repository.delete({ userId: dto.userId, game: dto.game, status: Not('active') });
 
+    let row = await this.repository.findOne({
+      where: { userId: dto.userId, game: dto.game, ownerToken: dto.clientToken },
+    });
     if (!row) {
-      row = this.repository.create({ userId: dto.userId, game: dto.game });
+      row = this.repository.create({ userId: dto.userId, game: dto.game, ownerToken: dto.clientToken });
     }
 
     row.status = 'active';
@@ -51,7 +56,6 @@ export class FreeSpinsService {
     row.spinsStarted = 0;
     row.spinsRemaining = dto.spinsAwarded;
     row.accumulatedWinnings = 0;
-    row.ownerToken = dto.clientToken;
 
     await this.repository.save(row);
     return this.toSnapshot(row);
@@ -95,32 +99,39 @@ export class FreeSpinsService {
     return this.toSnapshot(row);
   }
 
-  /** Llamado al cargar el juego. Si hay una ronda activa para este (userId, game), ESTA llamada
-   *  es el evento de takeover: reclama la fila para dto.clientToken sin importar quién la tenía
-   *  -reconectar/recargar siempre gana-, dejando que cualquier escritura posterior de la ventana
-   *  vieja choque con loadOwnedActiveSession y se rechace. */
+  /** Llamado al cargar el juego. Retoma la ronda de esta pestaña (recargó la página) o una que
+   *  otra pestaña dejó abandonada hace más de ORPHANED_ROUND_TAKEOVER_MS - en ese caso la reclama,
+   *  y si la pestaña vieja vuelve, sus escrituras chocan con loadOwnedActiveSession (409). Nunca
+   *  le saca la ronda a una pestaña que la está jugando. */
   async resumeSession(dto: ResumeFreeSpinSessionDto): Promise<{ active: boolean } & Partial<FreeSpinSessionSnapshot>> {
-    const row = await this.repository.findOne({ where: { userId: dto.userId, game: dto.game } });
-    if (!row || row.status !== 'active') return { active: false };
+    const active = await this.repository.find({ where: { userId: dto.userId, game: dto.game, status: 'active' } });
 
-    row.ownerToken = dto.clientToken;
-    await this.repository.save(row);
+    const own = active.find((row) => row.ownerToken === dto.clientToken);
+    if (own) return { active: true, ...this.toSnapshot(own) };
 
-    return { active: true, ...this.toSnapshot(row) };
+    const now = Date.now();
+    const abandoned = active.find(
+      (row) => now - new Date(row.updatedAt).getTime() >= ORPHANED_ROUND_TAKEOVER_MS,
+    );
+    if (!abandoned) return { active: false };
+
+    // Libera el lugar (userId, game, ownerToken) por si esta pestaña tiene una fila vieja propia.
+    await this.repository.delete({ userId: dto.userId, game: dto.game, ownerToken: dto.clientToken });
+    abandoned.ownerToken = dto.clientToken;
+    await this.repository.save(abandoned);
+
+    return { active: true, ...this.toSnapshot(abandoned) };
   }
 
-  /** Centraliza la validación que comparten extend/progress/finish: la fila tiene que existir,
-   *  estar activa, y pertenecerle a quien llama (mismo clientToken que la reclamó última vez) -
-   *  si no, 404/400/409 según cuál de las tres cosas falló. El 409 es la pieza clave del
-   *  anti-duplicado: una ventana vieja que una más nueva ya le tomó el control deja de poder
-   *  escribir acá apenas intenta su próxima tirada. */
+  /** Centraliza la validación que comparten extend/progress/finish: solo la fila de esta pestaña,
+   *  y activa. Si esta pestaña ya no tiene fila (otra pestaña se la retomó por abandonada), 409:
+   *  es la señal para que el juego corte la ronda en vez de seguir escribiendo. */
   private async loadOwnedActiveSession(dto: FreeSpinSessionIdentityDto): Promise<FreeSpinSession> {
-    const row = await this.repository.findOne({ where: { userId: dto.userId, game: dto.game } });
-    if (!row) throw new NotFoundException('No free-spin session found for this user/game');
+    const row = await this.repository.findOne({
+      where: { userId: dto.userId, game: dto.game, ownerToken: dto.clientToken },
+    });
+    if (!row) throw new ConflictException('Free-spin session was taken over by another window');
     if (row.status !== 'active') throw new BadRequestException('Free-spin session is not active');
-    if (row.ownerToken !== dto.clientToken) {
-      throw new ConflictException('Free-spin session was taken over by another window');
-    }
     return row;
   }
 }
