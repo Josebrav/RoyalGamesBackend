@@ -31,7 +31,12 @@ export const BASE_WEIGHTS: Record<string, number> = {
 
 // Pesos durante el bono de wild pegajoso: JACKPOT no aparece (no tiene sentido seguir sumando al
 // contador estando ya adentro del bono) y se agrega STICKY_WILD con su propio peso.
-export const STICKY_WILD_WEIGHT = 2;
+// Bajado de 2 a 1 al pasar el bono de 10 a 15 tiradas (2026-10-16), para que el bono más largo no
+// se dispare de valor. Simulado (200k bonos): con 10 tiradas/peso 2 el bono pagaba ~10.9x la
+// apuesta y quedaban ~0.80 pegajosos; con 15/peso 1 paga ~15.0x y quedan ~0.60. No se puede
+// volver a 10.9x solo bajando este peso: las 5 tiradas extra pagan solas como tiradas normales.
+// RTP total: 74.5% -> 76.3%.
+export const STICKY_WILD_WEIGHT = 1;
 export const BONUS_WEIGHTS: Record<string, number> = {
   ...BASE_WEIGHTS,
   JACKPOT: 0,
@@ -51,4 +56,4 @@ export const PAYS: Record<string, number[]> = {
 };
 
 export const JACKPOT_COUNTER_TARGET = 100;
-export const STICKY_WILD_FREE_SPINS = 10;
+export const STICKY_WILD_FREE_SPINS = 15;
