@@ -53,6 +53,28 @@ export function rollRemaining(existing: SantaWildsCell[]): SantaWildsCell[] {
   });
 }
 
+/** Completa con wilds pegajosos forzados (en celdas libres al azar) si a esta altura del bono
+ *  todavía no se llegó a la cuota repartida: floor(spinNumber * minSticky / totalSpins). Así el
+ *  mínimo por bono se cumple de a poco y no todo junto en la última tirada, donde no rendiría. */
+export function ensureMinimumSticky(
+  cells: SantaWildsCell[],
+  spinNumber: number,
+  totalSpins: number,
+  minSticky: number,
+): SantaWildsCell[] {
+  const required = Math.min(Math.floor((spinNumber * minSticky) / totalSpins), minSticky);
+  const result = [...cells];
+  let have = result.filter((cell) => cell.sticky).length;
+  while (have < required) {
+    const free = result.map((cell, i) => (cell.sticky ? -1 : i)).filter((i) => i >= 0);
+    if (free.length === 0) break;
+    const i = free[Math.floor(Math.random() * free.length)];
+    result[i] = { symbol: 'STICKY_WILD', sticky: true };
+    have++;
+  }
+  return result;
+}
+
 /** Evalúa las 5 líneas de pago (todas las que ganen se suman) + cuenta símbolos JACKPOT (scatter,
  *  no paga por línea). WILD y STICKY_WILD sustituyen a cualquier símbolo en cualquier columna. */
 export function evalGrid(cells: SantaWildsCell[]): EvalResult {

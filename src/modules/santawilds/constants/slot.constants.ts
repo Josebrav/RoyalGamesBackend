@@ -31,12 +31,13 @@ export const BASE_WEIGHTS: Record<string, number> = {
 
 // Pesos durante el bono de wild pegajoso: JACKPOT no aparece (no tiene sentido seguir sumando al
 // contador estando ya adentro del bono) y se agrega STICKY_WILD con su propio peso.
-// Bajado de 2 a 1 al pasar el bono de 10 a 15 tiradas (2026-10-16), para que el bono más largo no
-// se dispare de valor. Simulado (200k bonos): con 10 tiradas/peso 2 el bono pagaba ~10.9x la
-// apuesta y quedaban ~0.80 pegajosos; con 15/peso 1 paga ~15.0x y quedan ~0.60. No se puede
-// volver a 10.9x solo bajando este peso: las 5 tiradas extra pagan solas como tiradas normales.
-// RTP total: 74.5% -> 76.3%.
-export const STICKY_WILD_WEIGHT = 1;
+// Al pasar el bono de 10 a 15 tiradas (2026-10-16) se bajó de 2 a 1, pero con 1 más de la mitad
+// de los bonos terminaban sin ningún pegajoso y se sentía que "no salen" - quedó en 1.5.
+// Simulado (200k bonos), con 15 tiradas:
+//   peso 1   -> bono ~15.0x la apuesta, ~45% de los bonos con algún pegajoso, RTP total ~76.3%
+//   peso 1.5 -> bono ~16.9x la apuesta, ~59% de los bonos con algún pegajoso, RTP total ~77.2%
+// (Antes, con 10 tiradas/peso 2: bono ~10.9x, ~55% con pegajoso, RTP total 74.5%.)
+export const STICKY_WILD_WEIGHT = 1.5;
 export const BONUS_WEIGHTS: Record<string, number> = {
   ...BASE_WEIGHTS,
   JACKPOT: 0,
@@ -57,3 +58,9 @@ export const PAYS: Record<string, number[]> = {
 
 export const JACKPOT_COUNTER_TARGET = 100;
 export const STICKY_WILD_FREE_SPINS = 15;
+
+// Mínimo garantizado de wilds pegajosos por bono, repartido a lo largo del bono (ver
+// ensureMinimumSticky en slot-engine.ts): con 15 tiradas, al menos 1 para la tirada 5, 2 para la
+// 10 y 3 para la 15 - los que salen solos por peso cuentan. Simulado (150k bonos, peso 1.5): el
+// bono pasa de ~16.9x a ~28.3x la apuesta y el RTP total de ~77.2% a ~82.4% (2026-10-16).
+export const MIN_STICKY_WILDS_PER_BONUS = 3;

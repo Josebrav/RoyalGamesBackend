@@ -5,8 +5,8 @@ import { SantaWildsRound, SantaWildsCell } from './entities/santawilds-round.ent
 import { SantaWildsJackpotProgress } from './entities/jackpot-progress.entity';
 import { User } from '../users/entities/user.entity';
 import { ChipsAward } from '../chips/entities/chips-award.entity';
-import { JACKPOT_COUNTER_TARGET, STICKY_WILD_FREE_SPINS } from './constants/slot.constants';
-import { freshGrid, rollRemaining, evalGrid, WinLine } from './slot-engine';
+import { JACKPOT_COUNTER_TARGET, STICKY_WILD_FREE_SPINS, MIN_STICKY_WILDS_PER_BONUS } from './constants/slot.constants';
+import { freshGrid, rollRemaining, ensureMinimumSticky, evalGrid, WinLine } from './slot-engine';
 
 export interface SpinResult {
   phase: 'no_win' | 'win' | 'bonus_triggered' | 'bonus_spin' | 'bonus_complete';
@@ -138,7 +138,13 @@ export class SantaWildsSlotService {
   }
 
   private async continueBonus(manager: EntityManager, round: SantaWildsRound): Promise<SpinResult> {
-    const cells = rollRemaining(round.cells);
+    const spinNumber = STICKY_WILD_FREE_SPINS - round.freeSpinsRemaining + 1;
+    const cells = ensureMinimumSticky(
+      rollRemaining(round.cells),
+      spinNumber,
+      STICKY_WILD_FREE_SPINS,
+      MIN_STICKY_WILDS_PER_BONUS,
+    );
     const { totalMultiples, winCoords } = evalGrid(cells);
 
     round.cells = cells;
