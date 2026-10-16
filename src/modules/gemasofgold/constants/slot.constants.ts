@@ -12,12 +12,12 @@ export const BASE_FREE_SPINS = 3;
 // la slot devuelve ~93% y el 2% restante va a los jackpots (ver
 // GEMASOFGOLD_JACKPOT_CONTRIBUTION_RATE), que también vuelve a los jugadores al ganarse.
 // Resultado de la simulación con estos valores:
-//   - premio (cualquiera) en ~21% de las tiradas
+//   - premio (cualquiera) en ~18% de las tiradas
 //   - bonus 1 de cada ~65 tiradas (pedido del usuario: entre 60 y 70)
-//   - el bonus paga en promedio ~19x la apuesta; mediana ~13x, el 10% más bajo ~4x o menos,
-//     el 10% más alto ~42x o más; máximo observado ~210x
-// La gold sale seguido (80% de las tiradas) y las gemas comunes poco: así los premios normales
-// sostienen el RTP aunque el bonus sea más raro.
+//   - el bonus paga en promedio ~21x la apuesta; mediana ~15x, el 10% más bajo ~4x o menos,
+//     el 10% más alto ~48x o más; máximo observado ~220x
+// La gold sale en el 60% de las tiradas (antes 80%: el usuario la veía en casi todas) y las gemas
+// comunes poco: así los premios normales sostienen el RTP aunque el bonus sea más raro.
 // Si se toca CUALQUIERA de estos valores o la lógica de slot-engine.ts, hay que volver a
 // simular: el RTP es muy sensible a ellos (con los placeholders anteriores daba 1428%).
 //
@@ -27,12 +27,12 @@ export const BASE_FREE_SPINS = 3;
 //   una por tirada), repartida entre las celdas del medio todavía vacías.
 // La tirada base y el bonus usan probabilidades distintas: en el bonus son más altas para que
 // las casillas libres se vayan llenando.
-export const SIDE_GEM_LAND_CHANCE = 0.0486;
-export const MIDDLE_GOLD_LAND_CHANCE = 0.8;
+export const SIDE_GEM_LAND_CHANCE = 0.056;
+export const MIDDLE_GOLD_LAND_CHANCE = 0.6;
 export const BONUS_SIDE_GEM_LAND_CHANCE = 0.105;
 export const BONUS_MIDDLE_GOLD_LAND_CHANCE = 0.08;
 
-// Valores de multiplicador posibles y su peso relativo (más alto = más común): peso 1/v^1.6,
-// x1 es el más frecuente y x20 el más raro (multiplicador promedio ~3.2).
+// Valores de multiplicador posibles y su peso relativo (más alto = más común): peso 1/v^1.47,
+// x1 es el más frecuente y x20 el más raro (multiplicador promedio ~3.5).
 export const MULTIPLIER_VALUES: number[] = Array.from({ length: 20 }, (_, i) => i + 1);
-export const MULTIPLIER_WEIGHTS: number[] = MULTIPLIER_VALUES.map((v) => 1 / Math.pow(v, 1.6));
+export const MULTIPLIER_WEIGHTS: number[] = MULTIPLIER_VALUES.map((v) => 1 / Math.pow(v, 1.47));

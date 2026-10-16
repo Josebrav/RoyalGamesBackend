@@ -31,6 +31,7 @@ import { DailyBonusModule } from './modules/daily-bonus/daily-bonus.module';
 import { GemasOfGoldModule } from './modules/gemasofgold/gemasofgold.module';
 import { DominoModule } from './modules/domino/domino.module';
 import { FreeSpinsModule } from './modules/free-spins/free-spins.module';
+import { RoyalJokerModule } from './modules/royaljoker/royaljoker.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -85,6 +86,7 @@ import { AppService } from './app.service';
     GemasOfGoldModule,
     DominoModule,
     FreeSpinsModule,
+    RoyalJokerModule,
   ],
   controllers: [AppController],
   providers: [
