@@ -54,29 +54,29 @@ const event = {
 
 describe('PaymentsService.handlePayPalWebhook', () => {
   it('acredita una orden cobrada que el front no llegó a confirmar', async () => {
-    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:2`, '2.00'));
+    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:102`, '5.00'));
     await service.handlePayPalWebhook(event);
-    expect(Number(user.chips)).toBe(1_000_000);
+    expect(Number(user.chips)).toBe(15_000_000);
     expect(pays).toHaveLength(1);
   });
 
   it('no acredita dos veces si llegan la captura del front y el webhook', async () => {
-    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:2`, '2.00'));
-    await service.capturePayPalOrder({ orderId: 'ORDER-1', userId: USER_ID, packageId: 2 });
+    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:102`, '5.00'));
+    await service.capturePayPalOrder({ orderId: 'ORDER-1', userId: USER_ID, packageId: 102 });
     await service.handlePayPalWebhook(event);
-    expect(Number(user.chips)).toBe(1_000_000);
+    expect(Number(user.chips)).toBe(15_000_000);
     expect(pays).toHaveLength(1);
   });
 
   it('acredita una orden cobrada en EUR por el precio en euros del paquete', async () => {
-    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:2`, '1.80', 'EUR'));
+    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:202`, '5.00', 'EUR'));
     await service.handlePayPalWebhook(event);
-    expect(Number(user.chips)).toBe(1_000_000);
-    expect(pays[0]).toMatchObject({ price: '1.80', currency: 'EUR' });
+    expect(Number(user.chips)).toBe(20_000_000);
+    expect(pays[0]).toMatchObject({ price: '5.00', currency: 'EUR' });
   });
 
   it('ignora otros eventos y órdenes con monto distinto al del paquete', async () => {
-    const { service, user } = buildService(completedOrder(`${USER_ID}:2`, '0.50'));
+    const { service, user } = buildService(completedOrder(`${USER_ID}:102`, '0.50'));
     await service.handlePayPalWebhook({ ...event, event_type: 'CHECKOUT.ORDER.APPROVED' });
     await service.handlePayPalWebhook(event);
     expect(Number(user.chips)).toBe(0);

@@ -3,41 +3,74 @@
  * da cada paquete y cuánto cuesta: el front solo manda el `packageId` y el backend
  * decide fichas y precio, así nadie puede pedir más fichas de las que paga.
  *
- * Si cambiás un paquete acá, actualizá también `chipOptions` en
+ * Un juego de paquetes por moneda, con las fichas que se acreditan de verdad:
+ * - USD: PayPal en dólares, y Mercado Pago Colombia/México (convierte el precio a COP/MXN).
+ * - EUR: PayPal España.
+ * - ARS: Mercado Pago Argentina.
+ * La página muestra cada paquete como "fichas base + X% gratis = total" (base = 500.000 fichas por
+ * dólar/euro, 500 por peso); acá solo importa el total, que es lo que se acredita.
+ *
+ * Si cambiás un paquete acá, actualizá también `CHIP_CATALOG` en
  * RoyalFrontNew/src/components/Buychips/buyChips.jsx (solo se usa para mostrar).
  */
+export type CatalogCurrency = 'USD' | 'EUR' | 'ARS';
+
+/** Monedas en las que cobra PayPal. */
+export type PayPalCurrency = 'USD' | 'EUR';
+
 export interface ChipPackage {
   id: number;
+  currency: CatalogCurrency;
+  /** Precio en `currency`. */
+  price: number;
+  /** Fichas que se acreditan. */
   chips: number;
-  /** Precio en USD; para Mercado Pago se convierte con la tasa de cada país. */
-  priceUsd: number;
-  /** Precio en EUR que cobra PayPal a usuarios de España (USD × 0,9, igual que muestra el front). */
-  priceEur: number;
   /** Solo se puede pagar con PayPal (Mercado Pago lo rechaza). */
   paypalOnly?: boolean;
 }
 
 export const CHIP_PACKAGES: readonly ChipPackage[] = [
-  { id: 1, chips: 500_000, priceUsd: 1, priceEur: 0.9 },
-  { id: 2, chips: 1_000_000, priceUsd: 2, priceEur: 1.8 },
-  { id: 3, chips: 5_000_000, priceUsd: 6, priceEur: 5.4 },
-  { id: 4, chips: 15_000_000, priceUsd: 15, priceEur: 13.5 },
-  { id: 5, chips: 50_000_000, priceUsd: 50, priceEur: 45 },
-  { id: 6, chips: 250_000_000, priceUsd: 200, priceEur: 180 },
-  { id: 7, chips: 1_000_000_000, priceUsd: 500, priceEur: 450 },
-  { id: 8, chips: 2_600_000_000, priceUsd: 1000, priceEur: 900 },
+  { id: 101, currency: 'USD', price: 1, chips: 2_500_000 },
+  { id: 102, currency: 'USD', price: 5, chips: 15_000_000 },
+  { id: 103, currency: 'USD', price: 10, chips: 40_000_000 },
+  { id: 104, currency: 'USD', price: 50, chips: 250_000_000 },
+  { id: 105, currency: 'USD', price: 100, chips: 600_000_000 },
+  { id: 106, currency: 'USD', price: 200, chips: 1_500_000_000 },
+  { id: 107, currency: 'USD', price: 500, chips: 7_500_000_000 },
+  { id: 108, currency: 'USD', price: 1000, chips: 20_000_000_000 },
+
+  { id: 201, currency: 'EUR', price: 1, chips: 3_000_000 },
+  { id: 202, currency: 'EUR', price: 5, chips: 20_000_000 },
+  { id: 203, currency: 'EUR', price: 10, chips: 50_000_000 },
+  { id: 204, currency: 'EUR', price: 50, chips: 300_000_000 },
+  { id: 205, currency: 'EUR', price: 100, chips: 750_000_000 },
+  { id: 206, currency: 'EUR', price: 200, chips: 2_000_000_000 },
+  { id: 207, currency: 'EUR', price: 500, chips: 10_000_000_000 },
+  { id: 208, currency: 'EUR', price: 1000, chips: 25_000_000_000 },
+
+  { id: 301, currency: 'ARS', price: 100, chips: 100_000 },
+  { id: 302, currency: 'ARS', price: 500, chips: 750_000 },
+  { id: 303, currency: 'ARS', price: 1_000, chips: 2_500_000 },
+  { id: 304, currency: 'ARS', price: 5_000, chips: 15_000_000 },
+  { id: 305, currency: 'ARS', price: 10_000, chips: 50_000_000 },
+  { id: 306, currency: 'ARS', price: 100_000, chips: 750_000_000 },
+  { id: 307, currency: 'ARS', price: 500_000, chips: 5_000_000_000 },
+  { id: 308, currency: 'ARS', price: 1_000_000, chips: 15_000_000_000 },
+
   // Paquete de prueba para verificar con plata real que PayPal cobra y acredita, sin gastar casi
-  // nada (visible para todos, solo con PayPal). Ojo: la comisión fija de PayPal puede
-  // superar los 0,10, así que no deja ganancia - es solo para probar.
-  { id: 9, chips: 29, priceUsd: 0.1, priceEur: 0.1, paypalOnly: true },
+  // nada (visible para todos, solo con PayPal). Ojo: la comisión fija de PayPal puede superar los
+  // 0,10, así que no deja ganancia - es solo para probar.
+  { id: 901, currency: 'USD', price: 0.1, chips: 29, paypalOnly: true },
+  { id: 902, currency: 'EUR', price: 0.1, chips: 29, paypalOnly: true },
 ];
 
-/** Monedas en las que cobra PayPal: EUR para España, USD para el resto. */
-export type PayPalCurrency = 'USD' | 'EUR';
+/** Precio del paquete con 2 decimales, como lo esperan PayPal y Mercado Pago ("0.10"). */
+export function packagePrice(chipPackage: ChipPackage): string {
+  return chipPackage.price.toFixed(2);
+}
 
-/** Precio del paquete en la moneda dada, con 2 decimales como lo espera PayPal ("0.90"). */
-export function getPayPalPrice(chipPackage: ChipPackage, currency: PayPalCurrency): string {
-  return (currency === 'EUR' ? chipPackage.priceEur : chipPackage.priceUsd).toFixed(2);
+export function isPayPalCurrency(currency: string | undefined): currency is PayPalCurrency {
+  return currency === 'USD' || currency === 'EUR';
 }
 
 export function findChipPackage(packageId: number): ChipPackage | undefined {

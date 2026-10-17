@@ -21,49 +21,37 @@ import { PaymentsRepository } from './repositories/payments.repository';
 import { MercadoPagoRepository } from './repositories/mercadopago.repository';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { UsersService } from '../users/users.service';
-import { ChipPackage, PayPalCurrency, findChipPackage, getPayPalPrice } from './chip-packages';
+import { CatalogCurrency, ChipPackage, PayPalCurrency, findChipPackage, isPayPalCurrency, packagePrice } from './chip-packages';
 import { isValidMercadoPagoSignature } from './mercadopago-signature';
 
 export type MercadoPagoCountry = 'ar' | 'co' | 'mx';
 
 /**
  * Una cuenta vendedora de MercadoPago por país; cada una solo liquida en su propia moneda.
- * `usdRate` convierte el precio en USD del paquete a la moneda local (mismas tasas que
+ * `catalog`: de qué juego de paquetes (chip-packages.ts) vende. Argentina tiene sus paquetes en
+ * pesos; Colombia y México venden los de USD convertidos con `usdRate` (mismas tasas que
  * muestra el front en buyChips.jsx).
  */
 const MERCADOPAGO_COUNTRY_CONFIG: Record<
   MercadoPagoCountry,
-  { currency: string; envVar: string; usdRate: number }
+  { currency: string; envVar: string; usdRate: number; catalog: CatalogCurrency }
 > = {
-  ar: { currency: 'ARS', envVar: 'MERCADOPAGO_ACCESS_TOKEN_AR', usdRate: 1000 },
-  co: { currency: 'COP', envVar: 'MERCADOPAGO_ACCESS_TOKEN_CO', usdRate: 5200 },
-  mx: { currency: 'MXN', envVar: 'MERCADOPAGO_ACCESS_TOKEN_MX', usdRate: 20 },
+  ar: { currency: 'ARS', envVar: 'MERCADOPAGO_ACCESS_TOKEN_AR', usdRate: 1000, catalog: 'ARS' },
+  co: { currency: 'COP', envVar: 'MERCADOPAGO_ACCESS_TOKEN_CO', usdRate: 5200, catalog: 'USD' },
+  mx: { currency: 'MXN', envVar: 'MERCADOPAGO_ACCESS_TOKEN_MX', usdRate: 20, catalog: 'USD' },
 };
 
 /**
- * Moneda de PayPal según el país del perfil del usuario: EUR para España, USD para el
- * resto. Lo decide el backend; el front usa la misma regla solo para cargar el SDK.
- */
-export function payPalCurrencyForCountry(country: string | null | undefined): PayPalCurrency {
-  const normalized = (country || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-  return ['espana', 'spain', 'es'].includes(normalized) ? 'EUR' : 'USD';
-}
-
-/**
- * true si `amount` (formato PayPal) es exactamente el precio del paquete en una moneda
- * que cobramos (USD o EUR). Devuelve la moneda reconocida, o null si no coincide.
+ * Moneda reconocida si `amount` (formato PayPal) es exactamente el precio del paquete en su
+ * moneda (USD o EUR), o null si no coincide.
  */
 function matchPayPalAmount(
   amount: { currency_code?: string; value?: string } | undefined,
   chipPackage: ChipPackage,
 ): PayPalCurrency | null {
   const currency = amount?.currency_code;
-  if (currency !== 'USD' && currency !== 'EUR') return null;
-  return Number(amount?.value) === Number(getPayPalPrice(chipPackage, currency)) ? currency : null;
+  if (!isPayPalCurrency(currency) || currency !== chipPackage.currency) return null;
+  return Number(amount?.value) === Number(packagePrice(chipPackage)) ? currency : null;
 }
 
 /** Busca el paquete o tira 400: el cliente nunca decide fichas ni precio. */
@@ -171,11 +159,16 @@ export class PaymentsService {
     if (chipPackage.paypalOnly) {
       throw new BadRequestException('Este paquete solo se puede pagar con PayPal.');
     }
+    if (chipPackage.currency !== config.catalog) {
+      throw new BadRequestException(`Este paquete no se vende con Mercado Pago en "${country}".`);
+    }
+    // Argentina vende sus paquetes en pesos tal cual; Colombia/México convierten los de USD.
+    const price = chipPackage.currency === config.currency ? chipPackage.price : chipPackage.price * config.usdRate;
 
     return this.buildAndPersistMercadoPagoOrder({
       userId: dto.userId,
       chips: chipPackage.chips,
-      price: (chipPackage.priceUsd * config.usdRate).toFixed(2),
+      price: price.toFixed(2),
       currency: config.currency,
       accessToken,
     });
@@ -457,7 +450,15 @@ export class PaymentsService {
       throw new NotFoundException('User not found');
     }
 
-    const currency = createPayPalOrderDto.currency ?? payPalCurrencyForCountry(user.country);
+    // PayPal cobra en la moneda del paquete (los de USD en dólares, los de EUR en euros); los de
+    // pesos son solo de Mercado Pago.
+    const currency = chipPackage.currency;
+    if (!isPayPalCurrency(currency)) {
+      throw new BadRequestException('Este paquete no se puede pagar con PayPal.');
+    }
+    if (createPayPalOrderDto.currency && createPayPalOrderDto.currency !== currency) {
+      throw new BadRequestException('La moneda no coincide con la del paquete.');
+    }
 
     try {
       const client = this.getPayPalClient();
@@ -470,7 +471,7 @@ export class PaymentsService {
           {
             amount: {
               currency_code: currency,
-              value: getPayPalPrice(chipPackage, currency),
+              value: packagePrice(chipPackage),
             },
             description: `Royal Games - ${chipPackage.chips} Chips`,
             // "<userId>:<packageId>": al capturar se lee de acá qué paquete se pagó.
@@ -618,7 +619,7 @@ export class PaymentsService {
         manager.create(Pay, {
           userId,
           chips: chipPackage.chips,
-          price: getPayPalPrice(chipPackage, currency),
+          price: packagePrice(chipPackage),
           currency, // la moneda realmente cobrada (EUR para España, USD para el resto)
           paymentPlatform: 'paypal',
           mercadoPagoPaymentId: orderId,

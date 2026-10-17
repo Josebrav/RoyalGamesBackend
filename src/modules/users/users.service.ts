@@ -536,17 +536,15 @@ export class UsersService {
     return { buffer: user.avatarBin, mime: user.avatarMime };
   }
 
-  // Fichas cargadas (de por vida) que pide cada rango. Cada umbral coincide con un paquete del
-  // catálogo (payments/chip-packages.ts): comprarlo, o acumular lo mismo en compras más chicas,
-  // te lleva a ese rango. Aprox. en dólares: Plata ~$6, Oro ~$50, Platino ~$200, Diamante ~$500.
-  // Los umbrales viejos (1.000 a 50.000) eran de cuando 1.000 fichas valían $1: con los paquetes
-  // actuales (500.000 por $1) cualquier compra llevaba directo a Diamante. Mantener sincronizado
-  // con RANK_THRESHOLDS en RoyalFrontNew/src/utils/rank.js.
+  // Fichas cargadas (de por vida) que pide cada rango, atadas a los paquetes en dólares del
+  // catálogo (payments/chip-packages.ts): Plata = paquete de $5, Oro = $50, Platino = $200,
+  // Diamante = $500 (o acumular lo mismo en compras más chicas). Mantener sincronizado con
+  // RANK_THRESHOLDS en RoyalFrontNew/src/utils/rank.js.
   private static readonly RANK_THRESHOLDS: [RankTier, number][] = [
-    [RankTier.DIAMOND, 1_000_000_000],
-    [RankTier.PLATINUM, 250_000_000],
-    [RankTier.GOLD, 50_000_000],
-    [RankTier.SILVER, 5_000_000],
+    [RankTier.DIAMOND, 7_500_000_000],
+    [RankTier.PLATINUM, 1_500_000_000],
+    [RankTier.GOLD, 250_000_000],
+    [RankTier.SILVER, 15_000_000],
     [RankTier.BRONZE, 0],
   ];
 

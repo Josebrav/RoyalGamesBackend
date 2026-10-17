@@ -66,18 +66,38 @@ describe('PaymentsService webhook de Mercado Pago', () => {
     await expect(service.handleMercadoPagoWebhook({ type: 'payment', data: { id: '999' } })).rejects.toMatchObject({ status: 500 });
   });
 
-  it('no deja pagar con Mercado Pago el paquete de prueba (solo PayPal)', async () => {
-    const { service } = buildService(null);
-    const previous = process.env.MERCADOPAGO_ACCESS_TOKEN_AR;
-    process.env.MERCADOPAGO_ACCESS_TOKEN_AR = 'APP_USR-test';
-    try {
-      await expect(
-        service.createMercadoPagoOrderForCountry('ar', { userId: USER_ID, packageId: 9 }),
-      ).rejects.toThrow('solo se puede pagar con PayPal');
-    } finally {
-      if (previous === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN_AR;
-      else process.env.MERCADOPAGO_ACCESS_TOKEN_AR = previous;
-    }
+  describe('catálogo por país', () => {
+    const TOKENS = ['MERCADOPAGO_ACCESS_TOKEN_AR', 'MERCADOPAGO_ACCESS_TOKEN_CO'];
+    const previous: Record<string, string | undefined> = {};
+    beforeEach(() => TOKENS.forEach((k) => { previous[k] = process.env[k]; process.env[k] = 'APP_USR-test'; }));
+    afterEach(() => TOKENS.forEach((k) => {
+      if (previous[k] === undefined) delete process.env[k];
+      else process.env[k] = previous[k];
+    }));
+
+    const orderFor = async (country: string, packageId: number) => {
+      const { service } = buildService(null);
+      const spy = jest.spyOn(service as any, 'buildAndPersistMercadoPagoOrder').mockResolvedValue({ initPoint: 'x' });
+      await service.createMercadoPagoOrderForCountry(country, { userId: USER_ID, packageId });
+      return spy.mock.calls[0][0] as any;
+    };
+
+    it('Argentina cobra sus paquetes en pesos tal cual', async () => {
+      expect(await orderFor('ar', 303)).toMatchObject({ chips: 2_500_000, price: '1000.00', currency: 'ARS' });
+    });
+
+    it('Colombia vende los paquetes en dólares convertidos a COP', async () => {
+      expect(await orderFor('co', 101)).toMatchObject({ chips: 2_500_000, price: '5200.00', currency: 'COP' });
+    });
+
+    it('rechaza paquetes de otro catálogo', async () => {
+      await expect(orderFor('ar', 101)).rejects.toThrow('no se vende con Mercado Pago');
+      await expect(orderFor('co', 303)).rejects.toThrow('no se vende con Mercado Pago');
+    });
+
+    it('no deja pagar con Mercado Pago el paquete de prueba (solo PayPal)', async () => {
+      await expect(orderFor('ar', 901)).rejects.toThrow('solo se puede pagar con PayPal');
+    });
   });
 
   it('no acredita si el monto cobrado no coincide con la compra', async () => {

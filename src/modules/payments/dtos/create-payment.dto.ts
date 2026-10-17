@@ -28,8 +28,8 @@ export class CreatePayPalOrderDto {
   @Min(1)
   packageId: number;
 
-  // País de pago elegido en la página de compra (EUR = España). Si no viene, se decide por el país
-  // del perfil. El precio sale igual del catálogo para esa moneda: el cliente no puede inventarlo.
+  // Opcional: la moneda la define el paquete (los de USD se cobran en dólares, los de EUR en
+  // euros). Si viene, tiene que coincidir; si no, 400.
   @ApiProperty({ required: false, enum: ['USD', 'EUR'] })
   @IsOptional()
   @IsIn(['USD', 'EUR'])
