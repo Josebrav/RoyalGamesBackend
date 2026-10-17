@@ -536,14 +536,17 @@ export class UsersService {
     return { buffer: user.avatarBin, mime: user.avatarMime };
   }
 
-  // Deposited-chips thresholds for each rank. 1000 chips = $1 USD is the fixed rate used
-  // across the whole app (see BuyChips.jsx), so chips deposited is a currency-agnostic
-  // stand-in for real money loaded, without needing to store/convert per-payment currency.
+  // Fichas cargadas (de por vida) que pide cada rango. Cada umbral coincide con un paquete del
+  // catálogo (payments/chip-packages.ts): comprarlo, o acumular lo mismo en compras más chicas,
+  // te lleva a ese rango. Aprox. en dólares: Plata ~$6, Oro ~$50, Platino ~$200, Diamante ~$500.
+  // Los umbrales viejos (1.000 a 50.000) eran de cuando 1.000 fichas valían $1: con los paquetes
+  // actuales (500.000 por $1) cualquier compra llevaba directo a Diamante. Mantener sincronizado
+  // con RANK_THRESHOLDS en RoyalFrontNew/src/utils/rank.js.
   private static readonly RANK_THRESHOLDS: [RankTier, number][] = [
-    [RankTier.DIAMOND, 50000],
-    [RankTier.PLATINUM, 10000],
-    [RankTier.GOLD, 5000],
-    [RankTier.SILVER, 1000],
+    [RankTier.DIAMOND, 1_000_000_000],
+    [RankTier.PLATINUM, 250_000_000],
+    [RankTier.GOLD, 50_000_000],
+    [RankTier.SILVER, 5_000_000],
     [RankTier.BRONZE, 0],
   ];
 
