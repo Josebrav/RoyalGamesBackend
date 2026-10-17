@@ -98,6 +98,14 @@ describe('PayPal en euros', () => {
     expect(body.purchase_units[0].amount).toEqual({ currency_code: 'USD', value: '6.00' });
   });
 
+  it('no pide dirección de envío y muestra la marca en el checkout', async () => {
+    const client = { execute: jest.fn(async () => ({ result: { id: 'ORDER-1', status: 'CREATED' } })) };
+    const { service } = buildService(client, null);
+    await service.createPayPalOrder({ userId: USER_ID, packageId: 1 });
+    const body = (client.execute.mock.calls[0] as any[])[0].body;
+    expect(body.application_context).toMatchObject({ shipping_preference: 'NO_SHIPPING', brand_name: 'RoyalGames' });
+  });
+
   it('usa la moneda elegida en la página aunque el perfil diga otro país (o ninguno)', async () => {
     const client = { execute: jest.fn(async () => ({ result: { id: 'ORDER-1', status: 'CREATED' } })) };
     const { service } = buildService(client, null);

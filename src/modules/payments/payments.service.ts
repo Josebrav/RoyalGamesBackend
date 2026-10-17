@@ -480,6 +480,10 @@ export class PaymentsService {
         application_context: {
           return_url: process.env.PAYPAL_SUCCESS_URL,
           cancel_url: process.env.PAYPAL_CANCEL_URL,
+          // Las fichas son digitales: sin esto PayPal le pide (y muestra) una dirección de envío al
+          // comprador. Y el checkout muestra la marca, no el nombre del titular de la cuenta.
+          shipping_preference: 'NO_SHIPPING',
+          brand_name: 'RoyalGames',
         },
       };
 
