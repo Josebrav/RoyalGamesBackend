@@ -21,7 +21,7 @@ import { PaymentsRepository } from './repositories/payments.repository';
 import { MercadoPagoRepository } from './repositories/mercadopago.repository';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { UsersService } from '../users/users.service';
-import { ChipPackage, findChipPackage } from './chip-packages';
+import { ChipPackage, PayPalCurrency, findChipPackage, getPayPalPrice } from './chip-packages';
 import { isValidMercadoPagoSignature } from './mercadopago-signature';
 
 export type MercadoPagoCountry = 'ar' | 'co' | 'mx';
@@ -40,15 +40,30 @@ const MERCADOPAGO_COUNTRY_CONFIG: Record<
   mx: { currency: 'MXN', envVar: 'MERCADOPAGO_ACCESS_TOKEN_MX', usdRate: 20 },
 };
 
-/** true si `amount` (formato PayPal) es exactamente el precio en USD del paquete. */
-function isExpectedUsdAmount(
+/**
+ * Moneda de PayPal según el país del perfil del usuario: EUR para España, USD para el
+ * resto. Lo decide el backend; el front usa la misma regla solo para cargar el SDK.
+ */
+export function payPalCurrencyForCountry(country: string | null | undefined): PayPalCurrency {
+  const normalized = (country || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return ['espana', 'spain', 'es'].includes(normalized) ? 'EUR' : 'USD';
+}
+
+/**
+ * true si `amount` (formato PayPal) es exactamente el precio del paquete en una moneda
+ * que cobramos (USD o EUR). Devuelve la moneda reconocida, o null si no coincide.
+ */
+function matchPayPalAmount(
   amount: { currency_code?: string; value?: string } | undefined,
   chipPackage: ChipPackage,
-): boolean {
-  return (
-    amount?.currency_code === 'USD' &&
-    Number(amount?.value) === Number(chipPackage.priceUsd.toFixed(2))
-  );
+): PayPalCurrency | null {
+  const currency = amount?.currency_code;
+  if (currency !== 'USD' && currency !== 'EUR') return null;
+  return Number(amount?.value) === Number(getPayPalPrice(chipPackage, currency)) ? currency : null;
 }
 
 /** Busca el paquete o tira 400: el cliente nunca decide fichas ni precio. */
@@ -439,6 +454,8 @@ export class PaymentsService {
       throw new NotFoundException('User not found');
     }
 
+    const currency = payPalCurrencyForCountry(user.country);
+
     try {
       const client = this.getPayPalClient();
       const request = new paypalCheckoutServerSdk.orders.OrdersCreateRequest();
@@ -449,8 +466,8 @@ export class PaymentsService {
         purchase_units: [
           {
             amount: {
-              currency_code: 'USD',
-              value: chipPackage.priceUsd.toFixed(2),
+              currency_code: currency,
+              value: getPayPalPrice(chipPackage, currency),
             },
             description: `Royal Games - ${chipPackage.chips} Chips`,
             // "<userId>:<packageId>": al capturar se lee de acá qué paquete se pagó.
@@ -467,6 +484,7 @@ export class PaymentsService {
       return {
         orderId: response.result.id,
         status: response.result.status,
+        currency,
       };
     } catch (error) {
       this.logger.error('PayPal Order Creation Error:', error);
@@ -502,7 +520,7 @@ export class PaymentsService {
       !chipPackage ||
       orderUserId !== dto.userId ||
       chipPackage.id !== dto.packageId ||
-      !isExpectedUsdAmount(unit?.amount, chipPackage)
+      !matchPayPalAmount(unit?.amount, chipPackage)
     ) {
       this.logger.warn(
         `PayPal order ${dto.orderId} rechazada: no coincide con usuario ${dto.userId} / paquete ${dto.packageId}`,
@@ -536,7 +554,8 @@ export class PaymentsService {
 
         // Red de seguridad: lo efectivamente capturado tiene que ser el precio del paquete.
         const capture = response.result.purchase_units?.[0]?.payments?.captures?.[0];
-        if (!isExpectedUsdAmount(capture?.amount, chipPackage)) {
+        const currency = matchPayPalAmount(capture?.amount, chipPackage);
+        if (!currency) {
           this.logger.error(
             `PayPal order ${paymentId}: monto capturado ${capture?.amount?.value} ${capture?.amount?.currency_code} ` +
               `no coincide con el paquete ${chipPackage.id}; no se acreditan fichas`,
@@ -544,7 +563,7 @@ export class PaymentsService {
           throw new BadRequestException('El monto cobrado no coincide con el paquete');
         }
 
-        await this.creditPayPalOrder(paymentId, capturePayPalOrderDto.userId, chipPackage);
+        await this.creditPayPalOrder(paymentId, capturePayPalOrderDto.userId, chipPackage, currency);
         return response.result;
       }
 
@@ -565,6 +584,7 @@ export class PaymentsService {
     orderId: string,
     userId: string,
     chipPackage: ChipPackage,
+    currency: PayPalCurrency,
   ): Promise<void> {
     await this.dataSource.manager.transaction(async (manager) => {
       const transactionUser = await manager.findOne(User, {
@@ -591,8 +611,8 @@ export class PaymentsService {
         manager.create(Pay, {
           userId,
           chips: chipPackage.chips,
-          price: chipPackage.priceUsd.toFixed(2),
-          currency: 'USD', // PayPal siempre cobra en USD en este flujo (ver createPayPalOrder)
+          price: getPayPalPrice(chipPackage, currency),
+          currency, // la moneda realmente cobrada (EUR para España, USD para el resto)
           paymentPlatform: 'paypal',
           mercadoPagoPaymentId: orderId,
           status: PaymentStatus.APPROVED,
@@ -629,12 +649,13 @@ export class PaymentsService {
     const [userId, packageId] = String(unit?.custom_id ?? '').split(':');
     const chipPackage = findChipPackage(Number(packageId));
     const capture = unit?.payments?.captures?.find((c: any) => c.status === 'COMPLETED');
-    if (!userId || !chipPackage || !isExpectedUsdAmount(capture?.amount, chipPackage)) {
+    const currency = chipPackage ? matchPayPalAmount(capture?.amount, chipPackage) : null;
+    if (!userId || !chipPackage || !currency) {
       this.logger.warn(`PayPal webhook: orden ${orderId} no coincide con un paquete; no se acredita`);
       return;
     }
 
-    await this.creditPayPalOrder(order.id, userId, chipPackage);
+    await this.creditPayPalOrder(order.id, userId, chipPackage, currency);
   }
 
   // ============= GENERAL PAYMENT METHODS =============

@@ -3,15 +3,15 @@ import { Pay } from './entities/pay.entity';
 
 const USER_ID = '123e4567-e89b-12d3-a456-426614174000';
 
-function completedOrder(customId: string, value: string) {
+function completedOrder(customId: string, value: string, currency = 'USD') {
   return {
     id: 'ORDER-1',
     status: 'COMPLETED',
     purchase_units: [
       {
         custom_id: customId,
-        amount: { currency_code: 'USD', value },
-        payments: { captures: [{ status: 'COMPLETED', amount: { currency_code: 'USD', value } }] },
+        amount: { currency_code: currency, value },
+        payments: { captures: [{ status: 'COMPLETED', amount: { currency_code: currency, value } }] },
       },
     ],
   };
@@ -66,6 +66,13 @@ describe('PaymentsService.handlePayPalWebhook', () => {
     await service.handlePayPalWebhook(event);
     expect(Number(user.chips)).toBe(1_000_000);
     expect(pays).toHaveLength(1);
+  });
+
+  it('acredita una orden cobrada en EUR por el precio en euros del paquete', async () => {
+    const { service, user, pays } = buildService(completedOrder(`${USER_ID}:2`, '1.80', 'EUR'));
+    await service.handlePayPalWebhook(event);
+    expect(Number(user.chips)).toBe(1_000_000);
+    expect(pays[0]).toMatchObject({ price: '1.80', currency: 'EUR' });
   });
 
   it('ignora otros eventos y órdenes con monto distinto al del paquete', async () => {
