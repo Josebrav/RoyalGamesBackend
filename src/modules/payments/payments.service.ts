@@ -454,7 +454,7 @@ export class PaymentsService {
       throw new NotFoundException('User not found');
     }
 
-    const currency = payPalCurrencyForCountry(user.country);
+    const currency = createPayPalOrderDto.currency ?? payPalCurrencyForCountry(user.country);
 
     try {
       const client = this.getPayPalClient();

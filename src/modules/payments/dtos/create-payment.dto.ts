@@ -1,5 +1,6 @@
-import { IsUUID, IsInt, IsString, Min } from 'class-validator';
+import { IsUUID, IsInt, IsString, Min, IsOptional, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { PayPalCurrency } from '../chip-packages';
 
 /**
  * DTO para POST /mepago/create-order/:country (ar | co | mx).
@@ -26,6 +27,13 @@ export class CreatePayPalOrderDto {
   @IsInt()
   @Min(1)
   packageId: number;
+
+  // País de pago elegido en la página de compra (EUR = España). Si no viene, se decide por el país
+  // del perfil. El precio sale igual del catálogo para esa moneda: el cliente no puede inventarlo.
+  @ApiProperty({ required: false, enum: ['USD', 'EUR'] })
+  @IsOptional()
+  @IsIn(['USD', 'EUR'])
+  currency?: PayPalCurrency;
 }
 
 export class CapturePayPalOrderDto {
