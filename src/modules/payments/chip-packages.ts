@@ -27,7 +27,7 @@ export const CHIP_PACKAGES: readonly ChipPackage[] = [
   { id: 7, chips: 1_000_000_000, priceUsd: 500, priceEur: 450 },
   { id: 8, chips: 2_600_000_000, priceUsd: 1000, priceEur: 900 },
   // Paquete de prueba para verificar con plata real que PayPal cobra y acredita, sin gastar casi
-  // nada (en la página solo lo ven los administradores). Ojo: la comisión fija de PayPal puede
+  // nada (visible para todos, solo con PayPal). Ojo: la comisión fija de PayPal puede
   // superar los 0,10, así que no deja ganancia - es solo para probar.
   { id: 9, chips: 29, priceUsd: 0.1, priceEur: 0.1, paypalOnly: true },
 ];
