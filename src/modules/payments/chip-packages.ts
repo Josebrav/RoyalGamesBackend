@@ -13,6 +13,8 @@ export interface ChipPackage {
   priceUsd: number;
   /** Precio en EUR que cobra PayPal a usuarios de España (USD × 0,9, igual que muestra el front). */
   priceEur: number;
+  /** Solo se puede pagar con PayPal (Mercado Pago lo rechaza). */
+  paypalOnly?: boolean;
 }
 
 export const CHIP_PACKAGES: readonly ChipPackage[] = [
@@ -24,6 +26,10 @@ export const CHIP_PACKAGES: readonly ChipPackage[] = [
   { id: 6, chips: 250_000_000, priceUsd: 200, priceEur: 180 },
   { id: 7, chips: 1_000_000_000, priceUsd: 500, priceEur: 450 },
   { id: 8, chips: 2_600_000_000, priceUsd: 1000, priceEur: 900 },
+  // Paquete de prueba para verificar con plata real que PayPal cobra y acredita, sin gastar casi
+  // nada (en la página solo lo ven los administradores). Ojo: la comisión fija de PayPal puede
+  // superar los 0,10, así que no deja ganancia - es solo para probar.
+  { id: 9, chips: 29, priceUsd: 0.1, priceEur: 0.1, paypalOnly: true },
 ];
 
 /** Monedas en las que cobra PayPal: EUR para España, USD para el resto. */

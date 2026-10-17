@@ -66,6 +66,20 @@ describe('PaymentsService webhook de Mercado Pago', () => {
     await expect(service.handleMercadoPagoWebhook({ type: 'payment', data: { id: '999' } })).rejects.toMatchObject({ status: 500 });
   });
 
+  it('no deja pagar con Mercado Pago el paquete de prueba (solo PayPal)', async () => {
+    const { service } = buildService(null);
+    const previous = process.env.MERCADOPAGO_ACCESS_TOKEN_AR;
+    process.env.MERCADOPAGO_ACCESS_TOKEN_AR = 'APP_USR-test';
+    try {
+      await expect(
+        service.createMercadoPagoOrderForCountry('ar', { userId: USER_ID, packageId: 9 }),
+      ).rejects.toThrow('solo se puede pagar con PayPal');
+    } finally {
+      if (previous === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN_AR;
+      else process.env.MERCADOPAGO_ACCESS_TOKEN_AR = previous;
+    }
+  });
+
   it('no acredita si el monto cobrado no coincide con la compra', async () => {
     const { service, user, pays } = buildService(approved('pay-b', 10));
     await service.handleMercadoPagoWebhook({ type: 'payment', data: { id: '999' } });

@@ -107,6 +107,20 @@ describe('PayPal en euros', () => {
     expect(result.currency).toBe('EUR');
   });
 
+  it('paquete de prueba: cobra 0.10 en USD o EUR y acredita 29 fichas', async () => {
+    for (const currency of ['USD', 'EUR'] as const) {
+      const client = { execute: jest.fn(async () => ({ result: { id: 'ORDER-1', status: 'CREATED' } })) };
+      const { service } = buildService(client, null);
+      await service.createPayPalOrder({ userId: USER_ID, packageId: 9, currency });
+      const body = (client.execute.mock.calls[0] as any[])[0].body;
+      expect(body.purchase_units[0].amount).toEqual({ currency_code: currency, value: '0.10' });
+    }
+
+    const { service, user } = buildService(fakePayPalClient(order(`${USER_ID}:9`, '0.10'), '0.10'));
+    await service.capturePayPalOrder({ orderId: 'ORDER-1', userId: USER_ID, packageId: 9 });
+    expect(Number(user.chips)).toBe(29);
+  });
+
   it('acredita y guarda el pago en EUR cuando se cobró el precio en euros', async () => {
     const { service, user, saved } = buildService(
       fakePayPalClient(order(`${USER_ID}:1`, '0.90', 'EUR'), '0.90', 'EUR'),

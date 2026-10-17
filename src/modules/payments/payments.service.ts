@@ -168,6 +168,9 @@ export class PaymentsService {
     }
 
     const chipPackage = getChipPackageOrThrow(dto.packageId);
+    if (chipPackage.paypalOnly) {
+      throw new BadRequestException('Este paquete solo se puede pagar con PayPal.');
+    }
 
     return this.buildAndPersistMercadoPagoOrder({
       userId: dto.userId,
