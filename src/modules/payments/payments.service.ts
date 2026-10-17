@@ -273,6 +273,14 @@ export class PaymentsService {
     try {
       payment = await this.fetchMercadoPagoPayment(paymentId);
     } catch (mpError) {
+      // Pago inexistente (por ejemplo la "Simular notificación" del panel de Mercado Pago, que
+      // manda un id inventado): no hay nada que acreditar. Se responde OK - un 500 hace que Mercado
+      // Pago lo marque como fallido y lo reintente por días. Cualquier otro error (red, token
+      // inválido) sí se propaga, para que reintente y no se pierda un pago real.
+      if ((mpError as { status?: number })?.status === 404) {
+        this.logger.warn(`MercadoPago webhook: el pago ${paymentId} no existe en ninguna cuenta; ignorado`);
+        return;
+      }
       this.logger.error('Error querying MercadoPago API:', mpError);
       throw mpError;
     }

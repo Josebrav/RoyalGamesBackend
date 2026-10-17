@@ -52,6 +52,20 @@ describe('PaymentsService webhook de Mercado Pago', () => {
     expect(Number(user.chips)).toBe(500000);
   });
 
+  it('responde OK sin acreditar si el pago no existe (notificación simulada del panel)', async () => {
+    const { service, user, pays } = buildService(null);
+    jest.spyOn(service as any, 'fetchMercadoPagoPayment').mockRejectedValue({ status: 404, message: 'Payment not found' });
+    await expect(service.handleMercadoPagoWebhook({ type: 'payment', data: { id: '123456' } })).resolves.toBeUndefined();
+    expect(Number(user.chips)).toBe(0);
+    expect(pays.every((p) => p.status === PaymentStatus.PENDING)).toBe(true);
+  });
+
+  it('sigue fallando ante otros errores de Mercado Pago, para que reintente', async () => {
+    const { service } = buildService(null);
+    jest.spyOn(service as any, 'fetchMercadoPagoPayment').mockRejectedValue({ status: 500, message: 'boom' });
+    await expect(service.handleMercadoPagoWebhook({ type: 'payment', data: { id: '999' } })).rejects.toMatchObject({ status: 500 });
+  });
+
   it('no acredita si el monto cobrado no coincide con la compra', async () => {
     const { service, user, pays } = buildService(approved('pay-b', 10));
     await service.handleMercadoPagoWebhook({ type: 'payment', data: { id: '999' } });
